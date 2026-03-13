@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KINGSHIT - Tower Defense</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: monospace;
+      overflow: hidden;
+    }
+    canvas {
+      border: 2px solid #333;
+      cursor: crosshair;
+      image-rendering: pixelated;
+      max-width: 100vw;
+      max-height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Load order matters: config first, then systems, then maps, then main -->
+  <script src="js/config.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/enemy.js"></script>
+  <script src="js/projectile.js"></script>
+  <script src="js/tower.js"></script>
+  <script src="js/wave.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/maps/map1.js"></script>
+  <script src="js/maps/map2.js"></script>
+  <script src="js/maps/map3.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
