@@ -107,12 +107,12 @@ Game.Main = {
     if (input.clicked && input.clickPos) {
       const x = input.clickPos.x;
       const y = input.clickPos.y;
-      if (this.mapButtons) {
-        for (const btn of this.mapButtons) {
-          if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-            this.startMap(btn.mapData);
-            return;
-          }
+      // Single play button
+      if (this.playBtn) {
+        const b = this.playBtn;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+          this.startMap(Game.Maps.forest);
+          return;
         }
       }
     }
@@ -195,104 +195,56 @@ Game.Main = {
     ctx.fillStyle = lineGrad;
     ctx.fillRect(canvas.width / 2 - lineW / 2, lineY, lineW, 1);
 
-    // Map selection cards
-    const maps = [
-      { key: 'forest', data: Game.Maps.forest },
-      { key: 'crossroads', data: Game.Maps.crossroads },
-      { key: 'castle', data: Game.Maps.castle },
-    ];
+    // Play button
+    const btnW = 240;
+    const btnH = 54;
+    const btnX = (canvas.width - btnW) / 2;
+    const btnY = titleY + 80;
+    this.playBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-    this.mapButtons = [];
-    const cardW = 400;
-    const cardH = 82;
-    const startY = titleY + 65;
-    const gap = 10;
+    const mx = Game.Input.mouse.x;
+    const my = Game.Input.mouse.y;
+    const hovered = mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
 
-    for (let i = 0; i < maps.length; i++) {
-      const map = maps[i].data;
-      const bx = (canvas.width - cardW) / 2;
-      const by = startY + i * (cardH + gap);
+    // Button shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    this._roundRect(ctx, btnX + 2, btnY + 2, btnW, btnH, 8);
+    ctx.fill();
 
-      this.mapButtons.push({ x: bx, y: by, w: cardW, h: cardH, mapData: map });
+    // Button background
+    const btnBg = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    btnBg.addColorStop(0, hovered ? '#3A6B24' : '#2E5A1B');
+    btnBg.addColorStop(1, hovered ? '#2E5A1B' : '#1E4A0E');
+    ctx.fillStyle = btnBg;
+    this._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+    ctx.fill();
 
-      const mx = Game.Input.mouse.x;
-      const my = Game.Input.mouse.y;
-      const hovered = mx >= bx && mx <= bx + cardW && my >= by && my <= by + cardH;
+    // Button border
+    ctx.strokeStyle = hovered ? '#FFD700' : 'rgba(100,180,60,0.5)';
+    ctx.lineWidth = hovered ? 2 : 1;
+    this._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+    ctx.stroke();
 
-      // Card background
-      const cardBg = hovered ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
-      const cardBorder = hovered ? 'rgba(255,215,0,0.5)' : 'rgba(100,100,120,0.25)';
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      this._roundRect(ctx, bx + 2, by + 2, cardW, cardH, 6);
+    // Hover top highlight
+    if (hovered) {
+      const hg = ctx.createLinearGradient(btnX, btnY, btnX, btnY + 8);
+      hg.addColorStop(0, 'rgba(255,255,255,0.1)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hg;
+      this._roundRect(ctx, btnX, btnY, btnW, 8, 8);
       ctx.fill();
-
-      // Background
-      ctx.fillStyle = cardBg;
-      this._roundRect(ctx, bx, by, cardW, cardH, 6);
-      ctx.fill();
-
-      // Border
-      ctx.strokeStyle = cardBorder;
-      ctx.lineWidth = hovered ? 2 : 1;
-      this._roundRect(ctx, bx, by, cardW, cardH, 6);
-      ctx.stroke();
-
-      // Hover glow
-      if (hovered) {
-        const hg = ctx.createLinearGradient(bx, by, bx, by + cardH);
-        hg.addColorStop(0, 'rgba(255,215,0,0.06)');
-        hg.addColorStop(1, 'rgba(255,215,0,0)');
-        ctx.fillStyle = hg;
-        this._roundRect(ctx, bx, by, cardW, cardH, 6);
-        ctx.fill();
-      }
-
-      // Difficulty indicator (left accent bar)
-      const diffColors = ['#44AA44', '#DDAA00', '#DD4444'];
-      const diffColor = diffColors[map.difficulty - 1] || '#888';
-      ctx.fillStyle = diffColor;
-      this._roundRect(ctx, bx, by, 4, cardH, 2);
-      ctx.fill();
-
-      // Clip text content to card bounds
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(bx, by, cardW, cardH);
-      ctx.clip();
-
-      // Map name
-      ctx.fillStyle = hovered ? '#FFFFFF' : '#DDDDDD';
-      ctx.font = 'bold 15px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(map.name, bx + 16, by + 24);
-
-      // Difficulty stars + label on same line
-      const diffLabels = ['Easy', 'Medium', 'Hard'];
-      ctx.fillStyle = '#FFD700';
-      ctx.font = '11px monospace';
-      ctx.fillText('\u2605'.repeat(map.difficulty) + '\u2606'.repeat(3 - map.difficulty), bx + 16, by + 40);
-      ctx.fillStyle = diffColor;
-      ctx.font = '10px monospace';
-      ctx.fillText(diffLabels[map.difficulty - 1] || '???', bx + 76, by + 40);
-
-      // Description
-      ctx.fillStyle = '#888899';
-      ctx.font = '11px monospace';
-      ctx.fillText(map.description, bx + 16, by + 58);
-
-      // Wave count badge
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      this._roundRect(ctx, bx + cardW - 72, by + 10, 58, 20, 3);
-      ctx.fill();
-      ctx.fillStyle = '#888899';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(map.waves.length + ' waves', bx + cardW - 43, by + 24);
-
-      ctx.restore();
     }
+
+    // Button text
+    ctx.fillStyle = hovered ? '#FFFFFF' : '#DDDDDD';
+    ctx.font = 'bold 20px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PLAY', canvas.width / 2, btnY + 33);
+
+    // Subtitle
+    ctx.fillStyle = '#888899';
+    ctx.font = '11px monospace';
+    ctx.fillText('20 waves \u2022 Forest Path', canvas.width / 2, btnY + btnH + 20);
 
     // Controls help at bottom
     ctx.textAlign = 'center';
