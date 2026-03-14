@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Natural Terrain Techniques</title>
+<style>
+  body { background: #1a1a2e; color: #ccc; font-family: monospace; margin: 0; padding: 16px; }
+  h2 { color: #9cf; margin: 0 0 4px; }
+  .subtitle { color: #888; font-size: 0.85rem; margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .panel { }
+  .panel h3 { color: #adf; font-size: 0.9rem; margin: 0 0 4px; }
+  .panel p { color: #888; font-size: 0.75rem; margin: 0 0 8px; line-height: 1.5; }
+  canvas { border: 1px solid #333; border-radius: 4px; display: block; }
+  .verdict { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 3px; margin-bottom: 6px; }
+  .bad { background: #5a2020; color: #faa; }
+  .ok { background: #4a3a10; color: #fc8; }
+  .good { background: #1a4a20; color: #8fc; }
+  .great { background: #1a3a5a; color: #8cf; }
+</style>
+</head>
+<body>
+<h2>Why isometric tiles look like a board game — and what fixes it</h2>
+<p class="subtitle">The core problem: hard diamond edges are visible on every tile. Each technique below attacks this differently.</p>
+
+<div class="grid">
+
+<!-- Panel 1: Current approach -->
+<div class="panel">
+  <span class="verdict bad">Current — the board game problem</span>
+  <h3>Per-tile random color variation</h3>
+  <p>Each tile picks a random hue shift. Nearby tiles look unrelated. The diamond grid is perfectly visible because every edge is a hard color boundary.</p>
+  <canvas id="c1" width="300" height="220"></canvas>
+</div>
+
+<!-- Panel 2: Perlin noise -->
+<div class="panel">
+  <span class="verdict ok">Better — smooth noise color patches</span>
+  <h3>Perlin/fractal noise for color</h3>
+  <p>Color varies slowly using noise, so nearby tiles share a color family — like real terrain. The grid is still there but the eye reads "patches" not "tiles".</p>
+  <canvas id="c2" width="300" height="220"></canvas>
+</div>
+
+<!-- Panel 3: Non-grid-aligned decorations -->
+<div class="panel">
+  <span class="verdict good">Much better — break the decoration grid</span>
+  <h3>Non-aligned, size-varied decorations</h3>
+  <p>Trees/rocks placed at random sub-tile offsets with random sizes. The decoration layer stops revealing the underlying grid. Used by Stardew Valley, AoE, etc.</p>
+  <canvas id="c3" width="300" height="220"></canvas>
+</div>
+
+<!-- Panel 4: Terrain splatting -->
+<div class="panel">
+  <span class="verdict great">Best — hide the grid entirely</span>
+  <h3>Terrain splatting overlay</h3>
+  <p>After drawing tiles, paint large organic blobs on a second canvas layer. The blobs define terrain regions independent of the grid. The tile edges are hidden under the paint layer.</p>
+  <canvas id="c4" width="300" height="220"></canvas>
+</div>
+
+</div>
+
+<script>
+const TW = 18, TH = 9;
+function isoX(col, row, offX) { return offX + (col - row) * TW; }
+function isoY(col, row, offY) { return offY + (col + row) * TH; }
+
+function drawDiamond(ctx, cx, cy) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - TH);
+  ctx.lineTo(cx + TW, cy);
+  ctx.lineTo(cx, cy + TH);
+  ctx.lineTo(cx - TW, cy);
+  ctx.closePath();
+}
+
+// Simple value noise
+function fade(t) { return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t) { return a+t*(b-a); }
+const perm = [];
+for(let i=0;i<256;i++) perm[i]=i;
+for(let i=255;i>0;i--){const j=Math.floor(Math.random()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}
+function grad(h, x, y){ const v=h&3; const u=v<2?x:y,w=v<2?y:x; return ((h&1)?-u:u)+((h&2)?-w:w); }
+function noise2(x, y){
+  const X=Math.floor(x)&255, Y=Math.floor(y)&255;
+  x-=Math.floor(x); y-=Math.floor(y);
+  const u=fade(x), v=fade(y);
+  const a=perm[X]+Y, b=perm[X+1]+Y;
+  return lerp(lerp(grad(perm[a],x,y),grad(perm[b],x-1,y),u),
+              lerp(grad(perm[a+1],x,y-1),grad(perm[b+1],x-1,y-1),u),v);
+}
+function fbm(x,y,oct=4){
+  let v=0,a=0.5,f=1;
+  for(let i=0;i<oct;i++){v+=a*noise2(x*f,y*f);a*=0.5;f*=2;}
+  return v;
+}
+
+function hash(x,y){
+  let h=x*374761393+y*668265263;
+  h=((h^(h>>13))*1274126177)&0xffffffff;
+  return (h>>>0)/0xffffffff;
+}
+
+const COLS=14, ROWS=11;
+const offX=150, offY=14;
+
+// blocked map (roughly rectangular clusters)
+const blocked = [];
+for(let r=0;r<ROWS;r++){blocked[r]=[];for(let c=0;c<COLS;c++) blocked[r][c]=false;}
+[[2,1,3,3],[7,2,3,2],[1,6,4,3],[8,6,3,4],[4,4,3,2]].forEach(([cc,cr,w,h])=>{
+  for(let r=cr;r<cr+h&&r<ROWS;r++) for(let c=cc;c<cc+w&&c<COLS;c++) blocked[r][c]=true;
+});
+
+// ---- PANEL 1: Current (per-tile random) ----
+(function(){
+  const ctx=document.getElementById('c1').getContext('2d');
+  ctx.fillStyle='#1a2a10'; ctx.fillRect(0,0,300,220);
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    const n=hash(c,r);
+    if(blocked[r][c]){
+      ctx.fillStyle=`hsl(${118+(n*12-6)|0},42%,${25+(n*4-2)|0}%)`;
+    } else {
+      ctx.fillStyle=`hsl(${118+(n*12-6)|0},52%,${52+(n*6-3)|0}%)`;
+    }
+    drawDiamond(ctx,cx,cy); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=0.5; ctx.stroke();
+  }
+  // small trees on blocked
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(!blocked[r][c]) continue;
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    if(hash(c*3,r*7)<0.4){
+      ctx.fillStyle='#4a2e1a'; ctx.fillRect(cx-1.5,cy-16,3,10);
+      ctx.fillStyle='#2E7D32'; ctx.beginPath(); ctx.arc(cx,cy-18,7,0,Math.PI*2); ctx.fill();
+    }
+  }
+})();
+
+// ---- PANEL 2: Perlin noise color ----
+(function(){
+  const ctx=document.getElementById('c2').getContext('2d');
+  ctx.fillStyle='#1a2a10'; ctx.fillRect(0,0,300,220);
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    const n=fbm(c*0.3,r*0.3)*0.5+0.5; // 0..1
+    if(blocked[r][c]){
+      ctx.fillStyle=`hsl(${115+n*20|0},${38+n*10|0}%,${22+n*8|0}%)`;
+    } else {
+      ctx.fillStyle=`hsl(${110+n*25|0},${45+n*12|0}%,${44+n*14|0}%)`;
+    }
+    drawDiamond(ctx,cx,cy); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=0.3; ctx.stroke();
+  }
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(!blocked[r][c]) continue;
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    if(hash(c*3,r*7)<0.4){
+      ctx.fillStyle='#4a2e1a'; ctx.fillRect(cx-1.5,cy-16,3,10);
+      ctx.fillStyle='#2E7D32'; ctx.beginPath(); ctx.arc(cx,cy-18,7,0,Math.PI*2); ctx.fill();
+    }
+  }
+})();
+
+// ---- PANEL 3: Non-aligned decorations ----
+(function(){
+  const ctx=document.getElementById('c3').getContext('2d');
+  ctx.fillStyle='#1a2a10'; ctx.fillRect(0,0,300,220);
+  // draw tiles with noise color + reduced stroke
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    const n=fbm(c*0.3,r*0.3)*0.5+0.5;
+    if(blocked[r][c]){
+      ctx.fillStyle=`hsl(${115+n*20|0},${38+n*10|0}%,${22+n*8|0}%)`;
+    } else {
+      ctx.fillStyle=`hsl(${110+n*25|0},${45+n*12|0}%,${44+n*14|0}%)`;
+    }
+    drawDiamond(ctx,cx,cy); ctx.fill();
+    // NO visible stroke — hides tile edges further
+  }
+  // collect blocked cells and scatter decorations non-aligned
+  const decos=[];
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(!blocked[r][c]) continue;
+    // scatter 1-3 objects per tile at random offsets
+    const n=hash(c*11,r*13);
+    const count = n < 0.3 ? 1 : n < 0.65 ? 2 : 3;
+    for(let i=0;i<count;i++){
+      const ox=(hash(c*5+i,r*7+1)-0.5)*TW*1.6;
+      const oy=(hash(c*9+i,r*3+2)-0.5)*TH*1.6;
+      const sz=0.5+hash(c*7+i,r*11+3)*0.8;
+      const cx=isoX(c,r,offX)+ox, cy=isoY(c,r,offY)+oy;
+      decos.push({cx,cy,sz,type:hash(c*13+i,r*17+5)<0.7?'tree':'rock'});
+    }
+  }
+  // sort by cy for correct draw order
+  decos.sort((a,b)=>a.cy-b.cy);
+  decos.forEach(({cx,cy,sz,type})=>{
+    if(type==='tree'){
+      ctx.fillStyle='#3a2010'; ctx.fillRect(cx-1.5*sz,cy-14*sz,3*sz,9*sz);
+      ctx.fillStyle=`hsl(${118+((cx*7+cy*3)%20-10)|0},55%,28%)`;
+      ctx.beginPath(); ctx.arc(cx,cy-16*sz,7*sz,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=`hsl(${112+((cx*11+cy*5)%16-8)|0},50%,23%)`;
+      ctx.beginPath(); ctx.arc(cx-2*sz,cy-13*sz,5*sz,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle='#666';
+      ctx.beginPath(); ctx.ellipse(cx,cy-3*sz,7*sz,5*sz,-0.3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.beginPath(); ctx.ellipse(cx-2*sz,cy-5*sz,2*sz,1.5*sz,-0.5,0,Math.PI*2); ctx.fill();
+    }
+  });
+  // scatter some grass tufts on open tiles too
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(blocked[r][c]) continue;
+    if(hash(c*17,r*19)<0.15){
+      const ox=(hash(c*6,r*8)-0.5)*TW;
+      const oy=(hash(c*4,r*6)-0.5)*TH;
+      const cx2=isoX(c,r,offX)+ox, cy2=isoY(c,r,offY)+oy;
+      ctx.strokeStyle=`hsl(${118+(hash(c,r)*10-5)|0},60%,40%)`;
+      ctx.lineWidth=1;
+      for(let i=0;i<3;i++){
+        const bx=(i-1)*3;
+        ctx.beginPath(); ctx.moveTo(cx2+bx,cy2); ctx.lineTo(cx2+bx+(hash(c+i,r)*4-2),cy2-5); ctx.stroke();
+      }
+    }
+  }
+})();
+
+// ---- PANEL 4: Terrain splatting ----
+(function(){
+  const c4=document.getElementById('c4');
+  const ctx=c4.getContext('2d');
+  ctx.fillStyle='#1a2a10'; ctx.fillRect(0,0,300,220);
+
+  // Step 1: draw base grass tiles - thin stroke so grid barely visible
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const cx=isoX(c,r,offX), cy=isoY(c,r,offY);
+    const n=fbm(c*0.25,r*0.25)*0.5+0.5;
+    ctx.fillStyle=`hsl(${112+n*20|0},${46+n*10|0}%,${44+n*12|0}%)`;
+    drawDiamond(ctx,cx,cy); ctx.fill();
+  }
+
+  // Step 2: paint organic terrain blobs that DON'T align to grid
+  // These define the forest/dark regions as large irregular shapes
+  const blobs=[
+    {x:55,y:55,rx:45,ry:28,angle:0.4,color:'rgba(30,80,28,0.82)'},
+    {x:52,y:62,rx:35,ry:22,angle:-0.3,color:'rgba(25,70,24,0.6)'},
+    {x:195,y:70,rx:48,ry:24,angle:0.6,color:'rgba(30,80,28,0.75)'},
+    {x:200,y:65,rx:30,ry:18,angle:-0.2,color:'rgba(25,70,24,0.55)'},
+    {x:40,y:155,rx:55,ry:30,angle:0.2,color:'rgba(30,80,28,0.78)'},
+    {x:35,y:162,rx:38,ry:20,angle:0.5,color:'rgba(25,70,24,0.55)'},
+    {x:220,y:148,rx:40,ry:32,angle:-0.4,color:'rgba(30,80,28,0.8)'},
+    {x:125,y:110,rx:32,ry:20,angle:0.3,color:'rgba(30,80,28,0.7)'},
+  ];
+  blobs.forEach(({x,y,rx,ry,angle,color})=>{
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(angle);
+    // use radial gradient to feather the edges
+    const grad=ctx.createRadialGradient(0,0,0,0,0,Math.max(rx,ry));
+    const base=color.replace(/[\d.]+\)$/,'');
+    const alpha=parseFloat(color.match(/[\d.]+\)$/)[0]);
+    grad.addColorStop(0, color);
+    grad.addColorStop(0.6, color.replace(/[\d.]+\)$/, (alpha*0.7).toFixed(2)+')'));
+    grad.addColorStop(1, color.replace(/[\d.]+\)$/, '0)'));
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+
+  // Step 3: scatter decorations non-aligned across blob areas
+  // These are placed in world space independent of tile grid
+  const treePositions=[
+    [48,42],[62,50],[40,55],[70,58],[55,65],[60,40],
+    [190,58],[205,68],[215,72],[198,80],[188,75],
+    [32,148],[50,158],[38,165],[48,172],[28,162],
+    [215,140],[228,150],[218,162],[235,155],
+    [118,104],[130,112],[122,118],
+  ];
+  treePositions.sort((a,b)=>a[1]-b[1]);
+  treePositions.forEach(([tx,ty])=>{
+    const sz=0.7+hash(tx,ty)*0.5;
+    const hv=(hash(tx*3,ty*5)*20-10)|0;
+    ctx.fillStyle='#3a2010'; ctx.fillRect(tx-1.5*sz,ty-12*sz,3*sz,8*sz);
+    ctx.fillStyle=`hsl(${118+hv},55%,27%)`;
+    ctx.beginPath(); ctx.arc(tx,ty-14*sz,6*sz,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`hsl(${114+hv},50%,22%)`;
+    ctx.beginPath(); ctx.arc(tx-2*sz,ty-11*sz,4*sz,0,Math.PI*2); ctx.fill();
+  });
+})();
+</script>
+</body>
+</html>

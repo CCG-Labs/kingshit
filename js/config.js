@@ -25,6 +25,14 @@ Game.Config = {
     EXIT: 4,
   },
 
+  // Terrain types for splatting
+  TERRAIN: {
+    GRASS: 0,
+    FOREST: 1,
+    MOUNTAIN: 2,
+    WATER: 3,
+  },
+
   // Game balance
   STARTING_GOLD: 200,
   STARTING_LIVES: 20,

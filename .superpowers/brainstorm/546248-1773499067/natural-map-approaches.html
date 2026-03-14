@@ -1,0 +1,315 @@
+<h2>Making the Map Look More Natural</h2>
+<p class="subtitle">Which approach best captures the organic feel you're after?</p>
+
+<style>
+  canvas { display: block; image-rendering: pixelated; }
+  .card-image { padding: 8px; background: #111; border-radius: 4px; display: flex; justify-content: center; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { cursor: pointer; border: 2px solid transparent; border-radius: 8px; overflow: hidden; transition: border-color 0.2s; }
+  .card.selected { border-color: #7c6; }
+  .card-body { padding: 12px; }
+  .card-body h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card-body p { margin: 0; font-size: 0.8rem; opacity: 0.7; line-height: 1.4; }
+  .badge { display: inline-block; font-size: 0.7rem; padding: 2px 6px; border-radius: 3px; margin-bottom: 6px; }
+  .badge.easy { background: #2a5; color: #efe; }
+  .badge.medium { background: #a82; color: #fec; }
+  .badge.hard { background: #a33; color: #fee; }
+</style>
+
+<div class="cards">
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <canvas id="ca" width="240" height="200"></canvas>
+    </div>
+    <div class="card-body">
+      <span class="badge easy">Low effort</span>
+      <h3>A — Terrain Variety</h3>
+      <p>Give blocked tiles distinct visual identities: dark rocks for mountain clusters, blue-tinted tiles for lake areas, richer green for forest. The map stays grid-based but regions feel purposeful.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <canvas id="cb" width="240" height="200"></canvas>
+    </div>
+    <div class="card-body">
+      <span class="badge medium">Medium effort</span>
+      <h3>B — Worn Paths + Denser Deco</h3>
+      <p>Add visual dirt paths where enemies actually walk (via flow field heat map), increase tree/rock coverage to ~90% of blocked tiles, and add more CA passes for smoother cluster edges.</p>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <canvas id="cc" width="240" height="200"></canvas>
+    </div>
+    <div class="card-body">
+      <span class="badge hard">High effort</span>
+      <h3>C — Full Overhaul</h3>
+      <p>All of the above plus: tile edge blending (transition tiles between terrain types), noise-based grass color variation with patches, and height-based shading to give the landscape elevation feel.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const TW = 32, TH = 16; // tile half-sizes for iso
+
+function isoX(col, row, offX) { return offX + (col - row) * TW; }
+function isoY(col, row, offY) { return offY + (col + row) * TH; }
+
+function drawDiamond(ctx, cx, cy, w, h) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h/2);
+  ctx.lineTo(cx + w/2, cy);
+  ctx.lineTo(cx, cy + h/2);
+  ctx.lineTo(cx - w/2, cy);
+  ctx.closePath();
+}
+
+function drawTile(ctx, cx, cy, topColor, sideRColor, sideLColor, raised) {
+  const h = raised ? 8 : 0;
+  // left face
+  if (raised) {
+    ctx.fillStyle = sideLColor;
+    ctx.beginPath();
+    ctx.moveTo(cx - TW, cy);
+    ctx.lineTo(cx, cy + TH);
+    ctx.lineTo(cx, cy + TH + h);
+    ctx.lineTo(cx - TW, cy + h);
+    ctx.closePath();
+    ctx.fill();
+    // right face
+    ctx.fillStyle = sideRColor;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + TH);
+    ctx.lineTo(cx + TW, cy);
+    ctx.lineTo(cx + TW, cy + h);
+    ctx.lineTo(cx, cy + TH + h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // top face
+  ctx.fillStyle = topColor;
+  drawDiamond(ctx, cx, cy - h, TW*2, TH*2);
+  ctx.fill();
+}
+
+function drawTree(ctx, cx, cy) {
+  // trunk
+  ctx.fillStyle = '#5D4037';
+  ctx.fillRect(cx-2, cy-22, 4, 14);
+  // foliage
+  const greens = ['#2E7D32','#388E3C','#43A047'];
+  const g = greens[Math.floor(Math.random()*3)];
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy-26, 9, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#388E3C';
+  ctx.beginPath(); ctx.arc(cx-3, cy-22, 6, 0, Math.PI*2); ctx.fill();
+}
+
+function drawRock(ctx, cx, cy) {
+  ctx.fillStyle = '#757575';
+  ctx.beginPath(); ctx.ellipse(cx, cy-4, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.beginPath(); ctx.ellipse(cx-2, cy-6, 3, 2, -0.5, 0, Math.PI*2); ctx.fill();
+}
+
+// ---- OPTION A: Terrain Variety ----
+(function() {
+  const c = document.getElementById('ca');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+
+  // 5x6 grid showing terrain variety
+  const grid = [
+  // col: 0=grass, 1=forest-floor, 2=mountain, 3=water, 4=grass
+    [0,0,1,1,2],
+    [0,0,1,2,2],
+    [0,1,1,2,2],
+    [3,3,0,0,0],
+    [3,3,0,0,0],
+    [0,0,0,0,0],
+  ];
+  const colors = {
+    0: ['#5a8c3a','#4a7a2a','#3d6a22'], // grass buildable
+    1: ['#2E6B30','#256026','#1d521f'], // forest floor
+    2: ['#6b6b5a','#5a5a4a','#4a4a3a'], // mountain/rock
+    3: ['#3a6b9a','#2a5a8a','#1e4c7a'], // water
+  };
+  const decos = {
+    1: 'tree', 2: 'rock', 3: null, 0: null
+  };
+
+  const offX = 120, offY = 30;
+  const rows = grid.length, cols = grid[0].length;
+  for (let r = 0; r < rows; r++) {
+    for (let col2 = 0; col2 < cols; col2++) {
+      const t = grid[r][col2];
+      const [top, sR, sL] = colors[t];
+      const cx = isoX(col2, r, offX);
+      const cy = isoY(col2, r, offY);
+      drawTile(ctx, cx, cy, top, sR, sL, t===2);
+    }
+  }
+  // draw decos
+  for (let r = 0; r < rows; r++) {
+    for (let col2 = 0; col2 < cols; col2++) {
+      const t = grid[r][col2];
+      const cx = isoX(col2, r, offX);
+      const cy = isoY(col2, r, offY);
+      if (t===1) drawTree(ctx, cx, cy-4);
+      if (t===2) drawRock(ctx, cx, cy-12);
+    }
+  }
+
+  // legend
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#aaa';
+  const legends = [['#5a8c3a','Grass'],['#2E6B30','Forest'],['#6b6b5a','Mountain'],['#3a6b9a','Water']];
+  legends.forEach(([col3, label], i) => {
+    ctx.fillStyle = col3;
+    ctx.fillRect(8, 155 + i*11, 8, 8);
+    ctx.fillStyle = '#bbb';
+    ctx.fillText(label, 20, 163 + i*11);
+  });
+})();
+
+// ---- OPTION B: Worn Paths + Dense Deco ----
+(function() {
+  const c = document.getElementById('cb');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+
+  const rng = (seed) => { let s=seed; return ()=>{ s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; }; };
+  const rand = rng(42);
+
+  // 5x6 grid: 0=open, 1=path(worn), 2=blocked
+  const grid = [
+    [2,2,1,0,0],
+    [2,0,1,0,0],
+    [0,0,1,0,2],
+    [0,0,1,0,2],
+    [0,2,1,2,2],
+    [0,2,0,2,2],
+  ];
+  const offX = 120, offY = 20;
+  const rows = grid.length, cols = grid[0].length;
+
+  // draw tiles
+  for (let r = 0; r < rows; r++) {
+    for (let co = 0; co < cols; co++) {
+      const t = grid[r][co];
+      const cx = isoX(co, r, offX);
+      const cy = isoY(co, r, offY);
+      const hv = (rand()*12-6)|0;
+      if (t === 1) {
+        // worn dirt path
+        drawTile(ctx, cx, cy, '#8B6914', '#7a5a10', '#694d0c', true);
+      } else if (t === 2) {
+        drawTile(ctx, cx, cy, '#2E6B30', '#256026','#1d521f', false);
+      } else {
+        const base = 52 + ((rand()*12-6)|0);
+        drawTile(ctx, cx, cy, `hsl(118,52%,${base}%)`, `hsl(118,42%,${base-8}%)`, `hsl(118,38%,${base-12}%)`, false);
+      }
+    }
+  }
+  // draw decos on blocked
+  for (let r = 0; r < rows; r++) {
+    for (let co = 0; co < cols; co++) {
+      const t = grid[r][co];
+      const cx = isoX(co, r, offX);
+      const cy = isoY(co, r, offY);
+      if (t===2) {
+        const v = rand();
+        if (v < 0.7) drawTree(ctx, cx, cy-4);
+        else drawRock(ctx, cx, cy-4);
+      }
+    }
+  }
+
+  ctx.font = '10px monospace';
+  const legends = [['#5a8c3a','Open ground'],['#8B6914','Worn path'],['#2E6B30','Dense forest']];
+  legends.forEach(([col3, label], i) => {
+    ctx.fillStyle = col3;
+    ctx.fillRect(8, 163 + i*12, 8, 8);
+    ctx.fillStyle = '#bbb';
+    ctx.fillText(label, 20, 171 + i*12);
+  });
+})();
+
+// ---- OPTION C: Full Overhaul ----
+(function() {
+  const c = document.getElementById('cc');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+
+  const rng = (seed) => { let s=seed; return ()=>{ s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; }; };
+  const rand = rng(77);
+
+  // 0=grass, 1=path, 2=forest, 3=mountain, 4=water, 5=transition grass-forest
+  const grid = [
+    [3,3,5,2,2],
+    [3,5,1,2,2],
+    [0,1,1,5,2],
+    [0,1,4,4,5],
+    [0,5,4,4,0],
+    [0,0,0,0,0],
+  ];
+  const offX = 120, offY = 18;
+  const rows = grid.length, cols = grid[0].length;
+
+  function tileColor(t, rx) {
+    const r = rand()*0.06-0.03;
+    switch(t) {
+      case 0: return [`hsl(${118+rx},52%,${52+rx*3}%)`, `hsl(118,42%,44%)`, `hsl(118,38%,40%)`];
+      case 1: return ['#8B6914','#7a5a10','#694d0c'];
+      case 2: return ['#256026','#1d5220','#154419'];
+      case 3: return ['#7a7060','#6a6050','#5a5040'];
+      case 4: return ['#3a6b9a','#2a5a8a','#1e4c7a'];
+      case 5: return [`hsl(${120+rx},47%,${44+rx*2}%)`, `hsl(118,40%,36%)`, `hsl(118,36%,32%)`];
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let co = 0; co < cols; co++) {
+      const t = grid[r][co];
+      const cx = isoX(co, r, offX);
+      const cy = isoY(co, r, offY);
+      const rx = ((co*7+r*13)%7)-3;
+      const [top,sR,sL] = tileColor(t, rx);
+      const raised = t===3;
+      drawTile(ctx, cx, cy, top, sR, sL, raised);
+      // water shimmer
+      if (t===4) {
+        ctx.fillStyle = 'rgba(180,220,255,0.15)';
+        drawDiamond(ctx, cx, cy, TW*2, TH*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // decos
+  for (let r = 0; r < rows; r++) {
+    for (let co = 0; co < cols; co++) {
+      const t = grid[r][co];
+      const cx = isoX(co, r, offX);
+      const cy = isoY(co, r, offY);
+      if (t===2||t===5) drawTree(ctx, cx, cy-4);
+      if (t===3) drawRock(ctx, cx, cy-12);
+    }
+  }
+
+  ctx.font = '10px monospace';
+  const legends = [['#5a8c3a','Grass'],['#8B6914','Worn path'],['#256026','Forest'],['#7a7060','Mountain'],['#3a6b9a','Water'],['#4a7a3a','Transition']];
+  legends.forEach(([col3, label], i) => {
+    const row = Math.floor(i/3), lcol = i%3;
+    ctx.fillStyle = col3;
+    ctx.fillRect(8+lcol*78, 155 + row*12, 8, 8);
+    ctx.fillStyle = '#bbb';
+    ctx.fillText(label, 20+lcol*78, 163 + row*12);
+  });
+})();
+</script>

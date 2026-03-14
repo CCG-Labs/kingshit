@@ -4,6 +4,7 @@ Game.Maps = Game.Maps || {};
 // Forest Path - 100x100 open terrain with scattered obstacles
 (function() {
   const T = Game.Config.TILE;
+  const TERRAIN = Game.Config.TERRAIN;
   const COLS = 100;
   const ROWS = 100;
 
@@ -25,22 +26,24 @@ Game.Maps = Game.Maps || {};
 
   // Place obstacle clusters (mountains, forests, lakes)
   const obstacles = [
-    // Mountains (large blocky clusters)
-    { cx: 25, cy: 25, w: 8, h: 6 },
-    { cx: 60, cy: 15, w: 10, h: 5 },
-    { cx: 15, cy: 55, w: 6, h: 8 },
-    { cx: 75, cy: 35, w: 7, h: 7 },
-    { cx: 40, cy: 70, w: 9, h: 5 },
-    { cx: 85, cy: 60, w: 6, h: 6 },
-    { cx: 50, cy: 45, w: 5, h: 5 },
-    { cx: 30, cy: 85, w: 8, h: 4 },
-    { cx: 70, cy: 80, w: 5, h: 7 },
-    { cx: 10, cy: 30, w: 4, h: 6 },
-    { cx: 90, cy: 15, w: 5, h: 5 },
-    { cx: 55, cy: 90, w: 7, h: 4 },
-    { cx: 20, cy: 70, w: 5, h: 5 },
-    { cx: 80, cy: 50, w: 4, h: 8 },
-    { cx: 45, cy: 20, w: 6, h: 4 },
+    // Forest clusters (dark green splats)
+    { cx: 25, cy: 25, w: 8, h: 6, type: TERRAIN.FOREST },
+    { cx: 15, cy: 55, w: 6, h: 8, type: TERRAIN.FOREST },
+    { cx: 50, cy: 45, w: 5, h: 5, type: TERRAIN.FOREST },
+    { cx: 70, cy: 80, w: 5, h: 7, type: TERRAIN.FOREST },
+    { cx: 20, cy: 70, w: 5, h: 5, type: TERRAIN.FOREST },
+    { cx: 45, cy: 20, w: 6, h: 4, type: TERRAIN.FOREST },
+    // Mountain clusters (gray-brown splats)
+    { cx: 60, cy: 15, w: 10, h: 5, type: TERRAIN.MOUNTAIN },
+    { cx: 75, cy: 35, w: 7, h: 7, type: TERRAIN.MOUNTAIN },
+    { cx: 85, cy: 60, w: 6, h: 6, type: TERRAIN.MOUNTAIN },
+    { cx: 10, cy: 30, w: 4, h: 6, type: TERRAIN.MOUNTAIN },
+    { cx: 90, cy: 15, w: 5, h: 5, type: TERRAIN.MOUNTAIN },
+    { cx: 80, cy: 50, w: 4, h: 8, type: TERRAIN.MOUNTAIN },
+    // Water clusters (blue splats)
+    { cx: 40, cy: 70, w: 9, h: 5, type: TERRAIN.WATER },
+    { cx: 30, cy: 85, w: 8, h: 4, type: TERRAIN.WATER },
+    { cx: 55, cy: 90, w: 7, h: 4, type: TERRAIN.WATER },
   ];
 
   for (const obs of obstacles) {
@@ -133,6 +136,7 @@ Game.Maps = Game.Maps || {};
     difficulty: 1,
     grid: grid,
     waves: generateWaves(),
+    clusters: obstacles,
   };
 
   function generateWaves() {

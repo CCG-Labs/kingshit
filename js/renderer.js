@@ -36,6 +36,8 @@ Game.Renderer = {
     this.isoWorldOriginY = 40;
     this.camX = 0;
     this.camY = 0;
+
+    this._initNoise();
   },
 
   shake(intensity, duration) {
@@ -150,32 +152,83 @@ Game.Renderer = {
     return (this._seed - 1) / 2147483646;
   },
 
+  // ── Seeded Perlin Noise ───────────────────────────────
+
+  _noisePerm: null,
+
+  _initNoise() {
+    // Build a seeded permutation table (seed = 12345)
+    const p = [...Array(256).keys()];
+    let s = 12345;
+    for (let i = 255; i > 0; i--) {
+      s = (s * 1664525 + 1013904223) & 0xffffffff;
+      const j = (s >>> 0) % (i + 1);
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    this._noisePerm = [...p, ...p]; // 512 length
+  },
+
+  _noise2(x, y) {
+    // Standard Perlin noise, 2D
+    const fade = t => t*t*t*(t*(t*6-15)+10);
+    const lerp = (a,b,t) => a+t*(b-a);
+    const grad = (h, x, y) => { const u=h<8?x:y, v=h<4?y:h===12||h===14?x:0; return ((h&1)?-u:u)+((h&2)?-v:v); };
+    const p = this._noisePerm;
+    const X = Math.floor(x)&255, Y = Math.floor(y)&255;
+    x -= Math.floor(x); y -= Math.floor(y);
+    const u = fade(x), v = fade(y);
+    const A=p[X]+Y, B=p[X+1]+Y;
+    return lerp(lerp(grad(p[A],x,y), grad(p[B],x-1,y),u),
+                lerp(grad(p[A+1],x,y-1), grad(p[B+1],x-1,y-1),u), v);
+  },
+
+  _fbm(x, y) {
+    // 4-octave fractal noise, returns roughly -1..1
+    return this._noise2(x,y)*0.5 + this._noise2(x*2,y*2)*0.25
+         + this._noise2(x*4,y*4)*0.125 + this._noise2(x*8,y*8)*0.0625;
+  },
+
   // ── Map rendering (viewport-culled, no full cache) ──────
 
-  // Pre-compute decoration map (which blocked tiles get trees/rocks)
-  _decoMap: null,
-  _decoMapRef: null,
+  // Pre-compute scattered decorations (non-grid-aligned)
+  _scatterDecos: null,
+  _scatterDecoRef: null,
 
   _ensureDecoMap() {
     const map = Game.Map.current;
-    if (!map || this._decoMapRef === map) return;
-    this._decoMapRef = map;
-    this._decoMap = [];
-    this.seedRng(99);
+    if (!map || this._scatterDecoRef === map) return;
+    this._scatterDecoRef = map;
+    this._buildScatterDecos(map);
+  },
+
+  _buildScatterDecos(map) {
+    this._scatterDecos = [];
+    const TW = this.isoTileW, TH = this.isoTileH;
+
     for (let row = 0; row < map.grid.length; row++) {
-      this._decoMap[row] = [];
       for (let col = 0; col < map.grid[row].length; col++) {
-        if (map.grid[row][col] !== Game.Config.TILE.BLOCKED) {
-          this._decoMap[row][col] = 0;
-          this.rng(); // consume RNG to keep determinism
-          continue;
+        if (map.grid[row][col] !== Game.Config.TILE.BLOCKED) continue;
+
+        this.seedRng(row * 1000 + col + 500);
+        const count = this.rng() < 0.25 ? 1 : this.rng() < 0.6 ? 2 : 3;
+        const tileCenter = this._gridToIso(col + 0.5, row + 0.5); // world space (no cam)
+
+        for (let i = 0; i < count; i++) {
+          const ox = (this.rng() - 0.5) * TW * 1.4;
+          const oy = (this.rng() - 0.5) * TH * 1.4;
+          const scale = 0.6 + this.rng() * 0.7;
+          const type = this.rng() < 0.65 ? 1 : 2; // 1=tree, 2=rock
+          this._scatterDecos.push({
+            wx: tileCenter.x + ox,
+            wy: tileCenter.y + oy,
+            scale,
+            type,
+          });
         }
-        const r = this.rng();
-        if (r < 0.30) this._decoMap[row][col] = 1; // tree
-        else if (r < 0.42) this._decoMap[row][col] = 2; // rock
-        else this._decoMap[row][col] = 0;
       }
     }
+    // Sort by world Y so farther objects draw first (back-to-front)
+    this._scatterDecos.sort((a, b) => a.wy - b.wy);
   },
 
   // Get visible tile range for current camera
@@ -225,15 +278,20 @@ Game.Renderer = {
       }
     }
 
-    // Decorations (second pass for draw order)
-    for (let row = range.r0; row <= range.r1; row++) {
-      for (let col = range.c0; col <= range.c1; col++) {
-        const deco = this._decoMap[row] && this._decoMap[row][col];
-        if (!deco) continue;
-        const center = this.gridToScreen(col + 0.5, row + 0.5);
-        this.seedRng(row * 1000 + col + 200); // deterministic per tile
-        if (deco === 1) this._drawIsoTree(ctx, center.x, center.y);
-        else if (deco === 2) this._drawIsoRock(ctx, center.x, center.y);
+    // Terrain splats (organic blob overlays)
+    this._drawTerrainSplats(ctx);
+
+    // Scattered decorations (non-grid-aligned, pre-sorted by world Y)
+    const decos = this._scatterDecos;
+    if (decos) {
+      for (const d of decos) {
+        const sx = d.wx - this.camX;
+        const sy = d.wy - this.camY;
+        // Viewport cull
+        if (sx < -80 || sx > ctx.canvas.width + 80) continue;
+        if (sy < -80 || sy > ctx.canvas.height + 80) continue;
+        if (d.type === 1) this._drawIsoTree(ctx, sx, sy, d.scale);
+        else               this._drawIsoRock(ctx, sx, sy, d.scale);
       }
     }
   },
@@ -262,16 +320,13 @@ Game.Renderer = {
     const hue = buildable ? 118 : 125;
     const sat = buildable ? 52 : 42;
     const lit = buildable ? 30 : 25;
-    const hv = (this.rng() - 0.5) * 12;
-    const lv = (this.rng() - 0.5) * 6;
+    const n = this._fbm(col * 0.18, row * 0.18);
+    const hv = n * 14;
+    const lv = n * 8;
 
     this._tileDiamond(c, col, row);
     c.fillStyle = `hsl(${hue + hv}, ${sat}%, ${lit + lv}%)`;
     c.fill();
-    // Subtle edge
-    c.strokeStyle = `hsla(${hue}, ${sat}%, ${lit - 8}%, 0.3)`;
-    c.lineWidth = 0.5;
-    c.stroke();
 
     // Grass texture detail
     const center = this.gridToScreen(col + 0.5, row + 0.5);
@@ -361,60 +416,111 @@ Game.Renderer = {
     }
   },
 
+  // ── Terrain splats ──────────────────────────────────────
+
+  _drawTerrainSplats(ctx) {
+    const map = Game.Map.current;
+    if (!map || !map.clusters) return;
+    const TW = this.isoTileW, TH = this.isoTileH;
+    const T = Game.Config.TERRAIN;
+
+    for (const cl of map.clusters) {
+      const center = this.gridToScreen(cl.cx, cl.cy);
+      // Approximate iso-projected ellipse: wide X, squished Y
+      const rx = (cl.w + cl.h) * TW * 0.55;
+      const ry = (cl.w + cl.h) * TH * 0.55;
+
+      let innerColor, outerColor;
+      if (cl.type === T.FOREST) {
+        innerColor = 'rgba(18, 62, 20, 0.80)';
+        outerColor = 'rgba(18, 62, 20, 0)';
+      } else if (cl.type === T.MOUNTAIN) {
+        innerColor = 'rgba(88, 80, 60, 0.72)';
+        outerColor = 'rgba(88, 80, 60, 0)';
+      } else if (cl.type === T.WATER) {
+        innerColor = 'rgba(28, 88, 155, 0.82)';
+        outerColor = 'rgba(28, 88, 155, 0)';
+      } else {
+        continue;
+      }
+
+      // Draw 2 overlapping ellipses (core + halo) for soft edge
+      for (const [scale, alpha] of [[0.55, 1.0], [1.0, 0.7]]) {
+        ctx.save();
+        ctx.translate(center.x, center.y);
+        ctx.scale(1, ry / rx); // squish to iso aspect
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * scale);
+
+        // Parse inner color alpha and adjust for scale
+        const innerMatch = innerColor.match(/[\d.]+(?=\))/g);
+        const innerAlpha = parseFloat(innerMatch[innerMatch.length - 1]) * alpha;
+        const adjustedInner = innerColor.replace(/[\d.]+(?=\))/, innerAlpha.toFixed(2));
+
+        grad.addColorStop(0, adjustedInner);
+        grad.addColorStop(1, outerColor);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, rx * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  },
+
   // ── Iso decoration sprites (drawn inline) ────────────────
 
-  _drawIsoTree(c, sx, sy) {
+  _drawIsoTree(c, sx, sy, scale = 1) {
     // Shadow on ground
     c.fillStyle = 'rgba(0,0,0,0.15)';
     c.beginPath();
-    c.ellipse(sx + 1, sy + 3, 11, 4, 0, 0, Math.PI * 2);
+    c.ellipse(sx + 1, sy + 3, 11 * scale, 4 * scale, 0, 0, Math.PI * 2);
     c.fill();
 
     // Trunk
     c.fillStyle = '#5D4037';
-    c.fillRect(sx - 2, sy - 18, 4, 20);
+    c.fillRect(sx - 2 * scale, sy - 18 * scale, 4 * scale, 20 * scale);
     c.fillStyle = '#4E342E';
-    c.fillRect(sx - 2, sy - 18, 2, 20);
+    c.fillRect(sx - 2 * scale, sy - 18 * scale, 2 * scale, 20 * scale);
 
     // Foliage (2 layers)
     const greens = ['#2E7D32', '#388E3C', '#43A047'];
     const v = Math.floor(this.rng() * greens.length);
     for (let i = 1; i >= 0; i--) {
-      const ly = sy - 20 - i * 8;
-      const r = 13 - i * 3;
-      const g = c.createRadialGradient(sx - 2, ly - 2, 0, sx, ly, r);
+      const ly = sy - 20 * scale - i * 8 * scale;
+      const r = (13 - i * 3) * scale;
+      const g = c.createRadialGradient(sx - 2 * scale, ly - 2 * scale, 0, sx, ly, r);
       g.addColorStop(0, greens[(v + i) % greens.length]);
       g.addColorStop(0.7, greens[(v + i + 1) % greens.length]);
       g.addColorStop(1, '#1B5E20');
       c.fillStyle = g;
       c.beginPath();
-      c.arc(sx + (this.rng() - 0.5) * 3, ly, r, 0, Math.PI * 2);
+      c.arc(sx + (this.rng() - 0.5) * 3 * scale, ly, r, 0, Math.PI * 2);
       c.fill();
     }
   },
 
-  _drawIsoRock(c, sx, sy) {
+  _drawIsoRock(c, sx, sy, scale = 1) {
     c.fillStyle = 'rgba(0,0,0,0.12)';
     c.beginPath();
-    c.ellipse(sx + 1, sy + 2, 8, 3, 0, 0, Math.PI * 2);
+    c.ellipse(sx + 1, sy + 2, 8 * scale, 3 * scale, 0, 0, Math.PI * 2);
     c.fill();
 
-    const g = c.createLinearGradient(sx - 7, sy - 6, sx + 7, sy + 2);
+    const g = c.createLinearGradient(sx - 7 * scale, sy - 6 * scale, sx + 7 * scale, sy + 2);
     g.addColorStop(0, '#9E9E9E');
     g.addColorStop(0.5, '#757575');
     g.addColorStop(1, '#555555');
     c.fillStyle = g;
     c.beginPath();
-    c.ellipse(sx, sy - 3, 8, 5, 0, 0, Math.PI * 2);
+    c.ellipse(sx, sy - 3 * scale, 8 * scale, 5 * scale, 0, 0, Math.PI * 2);
     c.fill();
     c.strokeStyle = '#444';
-    c.lineWidth = 0.5;
+    c.lineWidth = 0.5 * scale;
     c.stroke();
 
     // Highlight
     c.fillStyle = 'rgba(255,255,255,0.15)';
     c.beginPath();
-    c.ellipse(sx - 3, sy - 5, 3, 2, -0.3, 0, Math.PI * 2);
+    c.ellipse(sx - 3 * scale, sy - 5 * scale, 3 * scale, 2 * scale, -0.3, 0, Math.PI * 2);
     c.fill();
   },
 
