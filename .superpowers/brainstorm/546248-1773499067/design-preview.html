@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Map Overhaul Preview</title>
+<style>
+  body { background: #1a1a2e; color: #ccc; font-family: monospace; margin: 0; padding: 16px; }
+  h2 { color: #9cf; margin: 0 0 4px; font-size: 1.1rem; }
+  .subtitle { color: #888; font-size: 0.8rem; margin: 0 0 16px; }
+  canvas { border: 1px solid #333; border-radius: 4px; }
+  .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .panel { flex: 1; min-width: 300px; }
+  .legend { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #aaa; }
+  .swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+  .notes { margin-top: 16px; font-size: 0.78rem; color: #888; line-height: 1.7; }
+  .notes span { color: #9cf; }
+</style>
+</head>
+<body>
+<h2>Full Overhaul — Design Preview</h2>
+<p class="subtitle">Larger canvas, actual TILE_SIZE proportions (64×32), all four terrain types + worn path + edge blending</p>
+
+<div class="layout">
+  <div class="panel">
+    <canvas id="main" width="480" height="380"></canvas>
+    <div class="legend">
+      <div class="leg"><div class="swatch" style="background:#5a8c3a"></div>Open grass</div>
+      <div class="leg"><div class="swatch" style="background:#8B6914"></div>Worn path</div>
+      <div class="leg"><div class="swatch" style="background:#256026"></div>Forest</div>
+      <div class="leg"><div class="swatch" style="background:#6e6050"></div>Mountain</div>
+      <div class="leg"><div class="swatch" style="background:#2a5a8a"></div>Lake / Water</div>
+      <div class="leg"><div class="swatch" style="background:#3d7232"></div>Forest edge blend</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="notes">
+      <b style="color:#ccc">What changes:</b><br><br>
+      <span>1. Terrain types</span><br>
+      6 clusters → Mountain (gray raised)<br>
+      6 clusters → Forest (dark green, dense trees)<br>
+      3 clusters → Lake (blue, animated shimmer)<br><br>
+      <span>2. Edge blending</span><br>
+      Tiles bordering a different terrain type<br>
+      interpolate toward neighbor's color,<br>
+      softening the hard rectangular cuts.<br><br>
+      <span>3. Worn paths</span><br>
+      Any tile on the BFS flow field gets<br>
+      a subtle dirt tint overlay — making the<br>
+      enemy routes visually readable.<br><br>
+      <span>4. Decoration density</span><br>
+      Forest: ~90% tree coverage<br>
+      Mountain: ~70% rock coverage<br>
+      Water: lily pad / ripple details<br>
+      Open grass: sparse deco unchanged<br><br>
+      <span>5. Grass variation</span><br>
+      Noise-based hue+lightness variation<br>
+      gives open tiles organic color patches<br>
+      instead of uniform flat green.
+    </div>
+  </div>
+</div>
+
+<script>
+const TW = 32, TH = 16;
+const TERRAIN = { GRASS: 0, FOREST: 1, MOUNTAIN: 2, WATER: 3 };
+
+function isoX(col, row, offX) { return offX + (col - row) * TW; }
+function isoY(col, row, offY) { return offY + (col + row) * TH; }
+
+function drawDiamond(ctx, cx, cy, w, h) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h/2);
+  ctx.lineTo(cx + w/2, cy);
+  ctx.lineTo(cx, cy + h/2);
+  ctx.lineTo(cx - w/2, cy);
+  ctx.closePath();
+}
+
+function drawBlock(ctx, cx, cy, topColor, sideRColor, sideLColor, blockH) {
+  const h = blockH || 0;
+  if (h > 0) {
+    ctx.fillStyle = sideLColor;
+    ctx.beginPath();
+    ctx.moveTo(cx - TW, cy - h);
+    ctx.lineTo(cx, cy + TH - h);
+    ctx.lineTo(cx, cy + TH);
+    ctx.lineTo(cx - TW, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = sideRColor;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + TH - h);
+    ctx.lineTo(cx + TW, cy - h);
+    ctx.lineTo(cx + TW, cy);
+    ctx.lineTo(cx, cy + TH);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = topColor;
+  drawDiamond(ctx, cx, cy - h, TW*2, TH*2);
+  ctx.fill();
+}
+
+function lerpColor(c1, c2, t) {
+  // parse hsl or hex
+  return t < 0.5 ? c1 : c2; // simplified for demo
+}
+
+function hash(x, y) {
+  let h = x * 374761393 + y * 668265263;
+  h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff;
+  return (h >>> 0) / 0xffffffff;
+}
+
+function terrainColors(t, col, row, blend) {
+  const n = hash(col * 7 + 13, row * 11 + 7);
+  const hv = (n * 12 - 6) | 0;
+  const lv = (n * 6 - 3) | 0;
+
+  if (t === TERRAIN.GRASS) {
+    const base = 52 + lv;
+    return [`hsl(${118+hv},52%,${base}%)`, `hsl(118,42%,${base-8}%)`, `hsl(118,38%,${base-12}%)`];
+  }
+  if (t === TERRAIN.FOREST) {
+    if (blend > 0) {
+      // transition tile
+      const base = 44 + lv;
+      return [`hsl(${121+hv},48%,${base}%)`, `hsl(120,40%,36%)`, `hsl(120,36%,32%)`];
+    }
+    const base = 32 + lv;
+    return [`hsl(${124+hv},50%,${base}%)`, `hsl(122,42%,24%)`, `hsl(122,38%,20%)`];
+  }
+  if (t === TERRAIN.MOUNTAIN) {
+    const base = 45 + lv;
+    return [`hsl(30,12%,${base}%)`, `hsl(30,10%,${base-8}%)`, `hsl(30,8%,${base-14}%)`];
+  }
+  if (t === TERRAIN.WATER) {
+    const base = 45 + lv;
+    return [`hsl(210,55%,${base}%)`, `hsl(210,50%,${base-8}%)`, `hsl(210,45%,${base-14}%)`];
+  }
+  return ['#5a8c3a','#4a7a2a','#3d6a22'];
+}
+
+function drawTree(ctx, cx, cy, scale) {
+  scale = scale || 1;
+  const sh = 16 * scale;
+  const th = 22 * scale;
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(cx+3, cy+3, 8*scale, 4*scale, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#5D4037';
+  ctx.fillRect(cx-2*scale, cy-th, 4*scale, th-4);
+  const greens = ['#2E7D32','#33691e','#388E3C'];
+  const g = greens[Math.floor(hash(cx, cy)*3)];
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy-th, 9*scale, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#1B5E20';
+  ctx.beginPath(); ctx.arc(cx-3*scale, cy-th+5*scale, 6*scale, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawRock(ctx, cx, cy) {
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(cx+2, cy+2, 9, 5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const grad = ctx.createLinearGradient(cx-8, cy-8, cx+8, cy+4);
+  grad.addColorStop(0, '#9E9E9E');
+  grad.addColorStop(0.5, '#757575');
+  grad.addColorStop(1, '#555');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.ellipse(cx, cy-4, 9, 7, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 0.5; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.ellipse(cx-3, cy-6, 3, 2, -0.5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawWater(ctx, cx, cy, time) {
+  ctx.save();
+  const shimmer = 0.12 + Math.sin(time * 2 + cx * 0.1 + cy * 0.1) * 0.06;
+  ctx.globalAlpha = shimmer;
+  ctx.fillStyle = 'rgba(160,220,255,1)';
+  drawDiamond(ctx, cx, cy, TW*2*0.6, TH*2*0.6);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Build a small demo grid (12x10)
+// T: terrain type, p: worn path, b: blend strength, d: deco type
+const COLS = 12, ROWS = 10;
+
+const grid = [];
+for (let r = 0; r < ROWS; r++) {
+  grid[r] = [];
+  for (let c = 0; c < COLS; c++) {
+    grid[r][c] = { t: TERRAIN.GRASS, path: false, blend: 0, deco: null };
+  }
+}
+
+// Place forest cluster (left side)
+const forestCells = [[1,2],[2,2],[3,2],[1,3],[2,3],[3,3],[4,3],[2,4],[3,4],[1,4]];
+forestCells.forEach(([c,r]) => { if(r<ROWS&&c<COLS) grid[r][c] = {t:TERRAIN.FOREST,path:false,blend:0,deco:'tree'}; });
+
+// Mountain cluster (top right)
+const mountCells = [[7,1],[8,1],[9,1],[8,2],[9,2],[10,2],[9,3],[10,3]];
+mountCells.forEach(([c,r]) => { if(r<ROWS&&c<COLS) grid[r][c] = {t:TERRAIN.MOUNTAIN,path:false,blend:0,deco:'rock'}; });
+
+// Water cluster (bottom right)
+const waterCells = [[8,6],[9,6],[10,6],[8,7],[9,7],[10,7],[9,8]];
+waterCells.forEach(([c,r]) => { if(r<ROWS&&c<COLS) grid[r][c] = {t:TERRAIN.WATER,path:false,blend:0,deco:'water'}; });
+
+// Worn path from left to right through center
+const pathCells = [[0,5],[1,5],[2,5],[3,5],[4,5],[5,5],[5,4],[6,4],[7,4],[7,5],[8,5],[11,5]];
+pathCells.forEach(([c,r]) => { if(r<ROWS&&c<COLS && grid[r][c].t===TERRAIN.GRASS) grid[r][c].path=true; });
+
+// Edge blending: tiles adjacent to forest/mountain get blend=0.5
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) {
+    if (grid[r][c].t !== TERRAIN.GRASS) continue;
+    const neighbors = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+    for (const [nr,nc] of neighbors) {
+      if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+      const nt = grid[nr][nc].t;
+      if (nt === TERRAIN.FOREST) { grid[r][c].blend = 0.5; break; }
+    }
+  }
+}
+
+const c = document.getElementById('main');
+const ctx = c.getContext('2d');
+
+function render(time) {
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle = '#1a2a10';
+  ctx.fillRect(0,0,c.width,c.height);
+
+  const offX = c.width/2, offY = 24;
+
+  // Draw tiles back to front
+  for (let r = 0; r < ROWS; r++) {
+    for (let col = 0; col < COLS; col++) {
+      const cell = grid[r][col];
+      const cx = isoX(col, r, offX);
+      const cy = isoY(col, r, offY);
+      const [top, sR, sL] = terrainColors(cell.t, col, r, cell.blend);
+      const raised = cell.t === TERRAIN.MOUNTAIN ? 10 : 0;
+      drawBlock(ctx, cx, cy, top, sR, sL, raised);
+
+      // worn path overlay
+      if (cell.path) {
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        ctx.fillStyle = '#7a5020';
+        drawDiamond(ctx, cx, cy, TW*2, TH*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+
+      // edge blend overlay
+      if (cell.blend > 0 && cell.t === TERRAIN.GRASS) {
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = '#1B5E20';
+        drawDiamond(ctx, cx, cy, TW*2, TH*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+
+      // water shimmer
+      if (cell.t === TERRAIN.WATER) {
+        drawWater(ctx, cx, cy, time/1000);
+      }
+    }
+  }
+
+  // Draw decorations on top
+  for (let r = 0; r < ROWS; r++) {
+    for (let col = 0; col < COLS; col++) {
+      const cell = grid[r][col];
+      const cx = isoX(col, r, offX);
+      const cy = isoY(col, r, offY);
+      const raised = cell.t === TERRAIN.MOUNTAIN ? 10 : 0;
+      if (cell.deco === 'tree') {
+        const n = hash(col*3+1, r*7+2);
+        if (n < 0.9) drawTree(ctx, cx, cy - raised - 6, 0.9 + n*0.2);
+      }
+      if (cell.deco === 'rock') {
+        const n = hash(col*5+3, r*9+4);
+        if (n < 0.75) drawRock(ctx, cx, cy - raised - 4);
+      }
+    }
+  }
+
+  requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
