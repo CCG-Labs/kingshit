@@ -1,9 +1,5 @@
 window.Game = window.Game || {};
 
-// Tower sprite heights for level stars and health bar placement
-const TOWER_STAR_HEIGHTS = { arrow: 44, cannon: 34, frost: 48, lightning: 42, sniper: 50, flame: 36 };
-const TOWER_BAR_HEIGHTS = { arrow: 50, cannon: 38, frost: 52, lightning: 48, sniper: 56, flame: 40 };
-
 Game.Renderer = {
   canvas: null,
   ctx: null,
@@ -704,7 +700,8 @@ Game.Renderer = {
       ctx.save();
       ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 4;
       ctx.fillStyle = '#FFD700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('\u2605'.repeat(tower.level - 1), tx, ty - (TOWER_STAR_HEIGHTS[tower.type] || 30));
+      const starHeights = { arrow: 44, cannon: 34, frost: 48, lightning: 42, sniper: 50, flame: 36 };
+      ctx.fillText('\u2605'.repeat(tower.level - 1), tx, ty - (starHeights[tower.type] || 30));
       ctx.restore();
     }
 
@@ -722,7 +719,8 @@ Game.Renderer = {
     if (tower.hp < tower.maxHp) {
       const bw = 28, bh = 3;
       const bx = tx - bw / 2;
-      const by = ty - (TOWER_BAR_HEIGHTS[tower.type] || 36) - 6;
+      const barHeights = { arrow: 50, cannon: 38, frost: 52, lightning: 48, sniper: 56, flame: 40 };
+      const by = ty - (barHeights[tower.type] || 36) - 6;
       const ratio = tower.hp / tower.maxHp;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);

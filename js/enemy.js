@@ -1,7 +1,5 @@
 window.Game = window.Game || {};
 
-const ADJACENT_OFFSETS = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
-
 Game.Enemy = class Enemy {
   constructor(type, entryCol, entryRow, waveNum) {
     const def = Game.Config.ENEMIES[type];
@@ -303,7 +301,7 @@ Game.Enemy = class Enemy {
 
   findAdjacentTower() {
     if (!Game.state) return null;
-    const offsets = ADJACENT_OFFSETS;
+    const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
     let best = null;
     let bestHp = Infinity;
     for (const [dx, dy] of offsets) {
