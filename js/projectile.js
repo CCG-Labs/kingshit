@@ -88,7 +88,8 @@ Game.Projectile = class Projectile {
           if (e.dead) this.tower.kills++;
         }
       }
-      Game.Particles.explosion(this.tx, this.ty, this.splashRadius, '#FF6600');
+      const hsp = Game.Renderer.worldToScreen(this.tx, this.ty);
+      Game.Particles.explosion(hsp.x, hsp.y, this.splashRadius, '#FF6600');
     } else {
       // Single target
       if (this.targetEnemy && !this.targetEnemy.dead) {
@@ -103,12 +104,13 @@ Game.Projectile = class Projectile {
     }
 
     // Hit particles
-    Game.Particles.spawn(this.tx, this.ty, 3, this.color, {
+    const psp = Game.Renderer.worldToScreen(this.tx, this.ty);
+    Game.Particles.spawn(psp.x, psp.y, 3, this.color, {
       speed: 50, life: 0.2, size: 2,
     });
 
     if (didCrit) {
-      Game.Particles.spawn(this.tx, this.ty, 6, '#FF0000', {
+      Game.Particles.spawn(psp.x, psp.y, 6, '#FF0000', {
         speed: 80, life: 0.3, size: 3,
       });
     }

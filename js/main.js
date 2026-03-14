@@ -12,8 +12,13 @@ Game.Main = {
 
   init() {
     this.canvas = document.getElementById('game');
-    this.canvas.width = Game.Config.GRID_COLS * Game.Config.TILE_SIZE;
-    this.canvas.height = Game.Config.GRID_ROWS * Game.Config.TILE_SIZE;
+    // Compute isometric canvas dimensions
+    const cols = Game.Config.GRID_COLS;
+    const rows = Game.Config.GRID_ROWS;
+    const tw = Game.Config.ISO_TILE_W;
+    const th = Game.Config.ISO_TILE_H;
+    this.canvas.width = (cols + rows) * tw / 2 + 24;
+    this.canvas.height = (cols + rows) * th / 2 + 130;
     this.ctx = this.canvas.getContext('2d');
 
     Game.Input.init(this.canvas);
@@ -348,13 +353,14 @@ Game.Main = {
       if (enemy.dead && !enemy._processed) {
         enemy._processed = true;
         state.gold += enemy.gold;
-        Game.Particles.goldPopup(enemy.x, enemy.y, enemy.gold);
-        Game.Particles.spawn(enemy.x, enemy.y, 10, enemy.color, {
+        const esp = Game.Renderer.worldToScreen(enemy.x, enemy.y);
+        Game.Particles.goldPopup(esp.x, esp.y, enemy.gold);
+        Game.Particles.spawn(esp.x, esp.y, 10, enemy.color, {
           speed: 100, life: 0.5, size: 3, glow: true,
         });
         if (enemy.type === 'boss') {
           Game.Renderer.shake(6, 0.3);
-          Game.Particles.explosion(enemy.x, enemy.y, 40, '#FF4400');
+          Game.Particles.explosion(esp.x, esp.y, 40, '#FF4400');
         }
       }
       if (enemy.escaped && !enemy._processed) {
@@ -475,9 +481,9 @@ Game.Main = {
         return;
       }
 
-      const ts = Game.Config.TILE_SIZE;
-      const col = Math.floor(x / ts);
-      const row = Math.floor(y / ts);
+      const grid = Game.Renderer.screenToGrid(x, y);
+      const col = grid.col;
+      const row = grid.row;
 
       if (state.placingTower) {
         if (Game.Map.canPlace(col, row, state.towers)) {
@@ -487,7 +493,8 @@ Game.Main = {
             const tower = new Game.Tower(state.placingTower, col, row);
             state.towers.push(tower);
             // Placement particle burst
-            Game.Particles.spawn(tower.x, tower.y, 6, def.color, {
+            const tsp = Game.Renderer.worldToScreen(tower.x, tower.y);
+            Game.Particles.spawn(tsp.x, tsp.y, 6, def.color, {
               speed: 60, life: 0.3, size: 2, glow: true,
             });
             if (state.gold < def.cost) {

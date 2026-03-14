@@ -78,10 +78,7 @@ Game.Input = {
   },
 
   getGridPos() {
-    const ts = Game.Config.TILE_SIZE;
-    return {
-      col: Math.floor(this.mouse.x / ts),
-      row: Math.floor(this.mouse.y / ts),
-    };
+    // Use isometric reverse projection
+    return Game.Renderer.screenToGrid(this.mouse.x, this.mouse.y);
   },
 };

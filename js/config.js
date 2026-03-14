@@ -1,10 +1,14 @@
 window.Game = window.Game || {};
 
 Game.Config = {
-  // Grid
+  // Grid (world-space logic grid)
   TILE_SIZE: 48,
   GRID_COLS: 20,
   GRID_ROWS: 14,
+
+  // Isometric projection
+  ISO_TILE_W: 64,
+  ISO_TILE_H: 32,
 
   // Tile types
   TILE: {
