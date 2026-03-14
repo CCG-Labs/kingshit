@@ -1,5 +1,9 @@
 window.Game = window.Game || {};
 
+// Tower sprite heights for level stars and health bar placement
+const TOWER_STAR_HEIGHTS = { arrow: 44, cannon: 34, frost: 48, lightning: 42, sniper: 50, flame: 36 };
+const TOWER_BAR_HEIGHTS = { arrow: 50, cannon: 38, frost: 52, lightning: 48, sniper: 56, flame: 40 };
+
 Game.Renderer = {
   canvas: null,
   ctx: null,
@@ -641,6 +645,18 @@ Game.Renderer = {
     ctx.ellipse(x, y - 4, 18, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // Castle health bar
+    if (Game.state && Game.state.castleHp < Game.state.castleMaxHp) {
+      const bw = 36, bh = 4;
+      const bx = x - bw / 2, by = y - 66;
+      const ratio = Game.state.castleHp / Game.state.castleMaxHp;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      // Gold-to-red gradient based on ratio
+      ctx.fillStyle = ratio > 0.6 ? '#FFD700' : (ratio > 0.3 ? '#FF8800' : '#FF3333');
+      ctx.fillRect(bx, by, bw * ratio, bh);
+    }
   },
 
   // ── Castle placement overlay ──────────────────────────────
@@ -688,9 +704,30 @@ Game.Renderer = {
       ctx.save();
       ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 4;
       ctx.fillStyle = '#FFD700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-      const heights = { arrow: 44, cannon: 34, frost: 48, lightning: 42, sniper: 50, flame: 36 };
-      ctx.fillText('\u2605'.repeat(tower.level - 1), tx, ty - (heights[tower.type] || 30));
+      ctx.fillText('\u2605'.repeat(tower.level - 1), tx, ty - (TOWER_STAR_HEIGHTS[tower.type] || 30));
       ctx.restore();
+    }
+
+    // Hit flash overlay
+    if (tower.hitFlash > 0) {
+      ctx.globalAlpha = tower.hitFlash * 0.35;
+      ctx.fillStyle = '#FF4444';
+      ctx.beginPath();
+      ctx.arc(tx, ty - 15, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Tower health bar (shown when damaged)
+    if (tower.hp < tower.maxHp) {
+      const bw = 28, bh = 3;
+      const bx = tx - bw / 2;
+      const by = ty - (TOWER_BAR_HEIGHTS[tower.type] || 36) - 6;
+      const ratio = tower.hp / tower.maxHp;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = ratio > 0.6 ? '#4488FF' : (ratio > 0.3 ? '#FFAA44' : '#FF4444');
+      ctx.fillRect(bx, by, bw * ratio, bh);
     }
 
     // Flame cone
@@ -1022,7 +1059,9 @@ Game.Renderer = {
     const baseSy = sp.y;
     const drawY = isFlying ? baseSy - 18 : baseSy;
     const r = enemy.radius;
-    const walk = Math.sin(this.time * 8 + enemy.x * 0.1);
+    const walk = enemy.attacking
+      ? Math.sin(this.time * 14 + enemy.x * 0.1) * 1.5
+      : Math.sin(this.time * 8 + enemy.x * 0.1);
 
     // Ground shadow
     ctx.fillStyle = isFlying ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.2)';
@@ -1060,6 +1099,14 @@ Game.Renderer = {
       ctx.fillStyle = '#FFF';
       ctx.beginPath(); ctx.arc(sx, drawY - r * 0.4, r, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
+    }
+
+    // Attacking indicator (crossed swords)
+    if (enemy.attacking) {
+      ctx.fillStyle = '#FF4444';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2694', sx, drawY - r * 2.0 - 8);
     }
 
     // Health bar

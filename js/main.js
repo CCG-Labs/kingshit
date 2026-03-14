@@ -58,6 +58,8 @@ Game.Main = {
       projectiles: [],
       gold: Game.Config.STARTING_GOLD,
       lives: Game.Config.STARTING_LIVES,
+      castleHp: Game.Config.CASTLE_HP,
+      castleMaxHp: Game.Config.CASTLE_HP,
       placingTower: null,
       selectedTower: null,
       paused: false,
@@ -275,6 +277,13 @@ Game.Main = {
 
     Game.WaveSpawner.update(gameDt, state);
 
+    // Between-wave tower regeneration
+    if (Game.WaveSpawner.betweenWaves) {
+      for (const tower of state.towers) {
+        tower.regenerate(gameDt);
+      }
+    }
+
     for (const enemy of state.enemies) {
       if (!enemy.dead && !enemy.escaped) {
         enemy.update(gameDt, state.enemies);
@@ -283,6 +292,36 @@ Game.Main = {
 
     for (const tower of state.towers) {
       tower.update(gameDt, state.enemies, state.projectiles);
+    }
+
+    // Process destroyed towers
+    let towersDestroyed = false;
+    for (let i = state.towers.length - 1; i >= 0; i--) {
+      const tower = state.towers[i];
+      if (tower.destroyed) {
+        // Explosion particles
+        const tsp = Game.Renderer.worldToScreen(tower.x, tower.y);
+        Game.Particles.explosion(tsp.x, tsp.y - 10, 30, tower.color);
+        Game.Particles.spawn(tsp.x, tsp.y - 10, 15, '#FF4400', {
+          speed: 100, life: 0.5, size: 3, glow: true,
+        });
+        Game.Renderer.shake(5, 0.3);
+        // Deselect if selected
+        if (state.selectedTower === tower) state.selectedTower = null;
+        state.towers.splice(i, 1);
+        towersDestroyed = true;
+      }
+    }
+    if (towersDestroyed) {
+      Game.Map.computeFlowField(state.towers);
+      // Enemies attacking destroyed towers need to re-evaluate
+      for (const enemy of state.enemies) {
+        if (enemy.attacking && enemy.attackTarget !== 'castle' && enemy.attackTarget && enemy.attackTarget.destroyed) {
+          enemy.attacking = false;
+          enemy.attackTarget = null;
+          enemy.nextCol = -1;
+        }
+      }
     }
 
     for (const proj of state.projectiles) {

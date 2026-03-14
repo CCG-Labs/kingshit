@@ -146,16 +146,22 @@ Game.UI = {
     ctx.fillStyle = state.lives > 5 ? '#FF6666' : '#FF3333';
     ctx.fillText('\u2665 ' + state.lives, 130, y);
 
+    // Castle HP
+    const castleRatio = state.castleHp / state.castleMaxHp;
+    ctx.fillStyle = castleRatio > 0.6 ? '#FFD700' : (castleRatio > 0.3 ? '#FF8800' : '#FF3333');
+    ctx.fillText('\u2656 ' + state.castleHp, 220, y);
+
     // Wave
     ctx.fillStyle = '#DDDDDD';
     const wave = Game.WaveSpawner.getCurrentWave();
     const total = Game.WaveSpawner.getTotalWaves();
-    ctx.fillText('Wave ' + wave + '/' + total, 240, y);
+    ctx.fillText('Wave ' + wave + '/' + total, 340, y);
 
     // Enemies alive
-    const alive = state.enemies.filter(e => !e.dead && !e.escaped).length;
+    let alive = 0;
+    for (const e of state.enemies) if (!e.dead && !e.escaped) alive++;
     ctx.fillStyle = alive > 0 ? '#AAAAAA' : '#666666';
-    ctx.fillText('x' + alive, 390, y);
+    ctx.fillText('x' + alive, 490, y);
 
     // Game speed
     ctx.textAlign = 'right';
@@ -268,7 +274,7 @@ Game.UI = {
     const mx = Game.Input.mouse.x;
 
     const tipW = 220;
-    const tipH = 90;
+    const tipH = 104;
     let tipX = mx - tipW / 2;
     let tipY = canvas.height - 90 - tipH;
     tipX = Math.max(4, Math.min(canvas.width - tipW - 4, tipX));
@@ -293,6 +299,10 @@ Game.UI = {
     ctx.fillStyle = '#CCCCCC';
     ctx.fillText('DMG: ' + def.damage + '  RNG: ' + def.range + '  SPD: ' + def.fireRate + 's', tipX + 10, ty);
 
+    ty += 14;
+    ctx.fillStyle = '#4488FF';
+    ctx.fillText('HP: ' + def.hp, tipX + 10, ty);
+
     ty += 16;
     ctx.fillStyle = '#88CC88';
     ctx.fillText('L3: ' + def.l3, tipX + 10, ty);
@@ -312,7 +322,7 @@ Game.UI = {
   drawTowerInfo(ctx, state, canvas) {
     const tower = state.selectedTower;
     const panelW = 225;
-    const panelH = 200;
+    const panelH = 216;
     const panelX = canvas.width - panelW - 10;
     const panelY = 40;
 
@@ -338,6 +348,10 @@ Game.UI = {
     ctx.fillText('Range:     ' + tower.range.toFixed(0), panelX + 10, y);
     y += 16;
     ctx.fillText('Fire Rate: ' + tower.fireRate.toFixed(2) + 's', panelX + 10, y);
+    y += 16;
+    const hpColor = tower.hp >= tower.maxHp ? '#4488FF' : (tower.hp / tower.maxHp > 0.3 ? '#FFAA44' : '#FF4444');
+    ctx.fillStyle = hpColor;
+    ctx.fillText('HP: ' + Math.ceil(tower.hp) + '/' + tower.maxHp, panelX + 10, y);
     y += 16;
     ctx.fillStyle = '#AAAAAA';
     ctx.fillText('Kills:     ' + tower.kills, panelX + 10, y);

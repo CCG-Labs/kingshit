@@ -1,5 +1,7 @@
 window.Game = window.Game || {};
 
+const ADJACENT_OFFSETS = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+
 Game.Enemy = class Enemy {
   constructor(type, entryCol, entryRow, waveNum) {
     const def = Game.Config.ENEMIES[type];
@@ -32,6 +34,16 @@ Game.Enemy = class Enemy {
     // Healer
     this.healRate = def.healRate || 0;
     this.healRange = def.healRange || 0;
+
+    // Attack stats (for attacking structures)
+    const atkScaling = Math.pow(Game.Config.WAVE_ATTACK_SCALING, waveNum - 1);
+    this.attackMin = Math.round((def.attackMin || 0) * atkScaling);
+    this.attackMax = Math.round((def.attackMax || 0) * atkScaling);
+    this.attackRate = def.attackRate || 0;
+    this.aggression = def.aggression || 0;
+    this.attackCooldown = 0;
+    this.attackTarget = null; // tower or 'castle'
+    this.attacking = false;
 
     // Position (world pixels)
     const ts = Game.Config.TILE_SIZE;
@@ -66,36 +78,60 @@ Game.Enemy = class Enemy {
 
     if (this.stunned) return;
 
-    // Calculate effective speed
-    let speed = this.baseSpeed;
-    let slowMult = 1;
-    for (const effect of this.statusEffects) {
-      if (effect.type === 'slow') {
-        slowMult = Math.min(slowMult, 1 - effect.amount);
+    // Attack logic — skip movement while attacking
+    if (this.attacking) {
+      this.updateAttacking(dt);
+    } else {
+      // Calculate effective speed
+      let speed = this.baseSpeed;
+      let slowMult = 1;
+      for (const effect of this.statusEffects) {
+        if (effect.type === 'slow') {
+          slowMult = Math.min(slowMult, 1 - effect.amount);
+        }
+      }
+      speed *= slowMult;
+
+      // Movement
+      if (this.flying) {
+        this.updateFlying(dt, speed);
+      } else {
+        this.updateGroundMovement(dt, speed);
       }
     }
-    speed *= slowMult;
 
-    // Movement
-    if (this.flying) {
-      this.updateFlying(dt, speed);
-    } else {
-      this.updateGroundMovement(dt, speed);
-    }
-
-    // Healer ability
+    // Common effects (apply whether attacking or moving)
     if (this.special === 'heal' && enemies) {
       this.healNearby(dt, enemies);
     }
-
-    // Hit flash decay
     if (this.hitFlash > 0) this.hitFlash -= dt * 5;
-
-    // DoT
     for (const effect of this.statusEffects) {
       if (effect.type === 'dot') {
         this.takeDamage(effect.damage * dt, true);
       }
+    }
+  }
+
+  updateAttacking(dt) {
+    this.attackCooldown -= dt;
+
+    // Validate target still exists
+    if (this.attackTarget === 'castle') {
+      if (!Game.state || Game.state.castleHp <= 0) {
+        this.attacking = false;
+        this.attackTarget = null;
+      }
+    } else if (this.attackTarget) {
+      if (this.attackTarget.destroyed || !Game.state.towers.includes(this.attackTarget)) {
+        this.attacking = false;
+        this.attackTarget = null;
+        this.nextCol = -1;
+      }
+    }
+
+    if (this.attacking && this.attackCooldown <= 0) {
+      this.performAttack();
+      this.attackCooldown = this.attackRate;
     }
   }
 
@@ -127,12 +163,20 @@ Game.Enemy = class Enemy {
     // Look up next tile if needed
     if (this.nextCol < 0) {
       if (!field || !field[this.currentRow] || !field[this.currentRow][this.currentCol]) {
-        // No path available - stuck
+        // No path available - stuck, attack any adjacent tower
+        if (this.attackRate > 0) {
+          const adj = this.findAdjacentTower();
+          if (adj) this.startAttack(adj);
+        }
         return;
       }
       const dir = field[this.currentRow][this.currentCol];
       if (dir.dx === 0 && dir.dy === 0) {
-        // At castle
+        // At castle - attack castle instead of escaping
+        if (this.attackRate > 0 && Game.state && Game.state.castleHp > 0) {
+          this.startAttack('castle');
+          return;
+        }
         this.escaped = true;
         return;
       }
@@ -155,6 +199,15 @@ Game.Enemy = class Enemy {
       this.currentCol = this.nextCol;
       this.currentRow = this.nextRow;
       this.nextCol = -1; // look up next direction on next frame
+
+      // Aggression check: aggressive enemies may stop to attack adjacent towers
+      if (this.aggression > 0 && this.attackRate > 0 && Math.random() < this.aggression) {
+        const adj = this.findAdjacentTower();
+        if (adj) {
+          this.startAttack(adj);
+          return;
+        }
+      }
     } else {
       this.x += (dx / dist) * speed * dt;
       this.y += (dy / dist) * speed * dt;
@@ -240,6 +293,65 @@ Game.Enemy = class Enemy {
 
   applyDot(damage, duration) {
     this.statusEffects.push({ type: 'dot', damage, duration });
+  }
+
+  startAttack(target) {
+    this.attacking = true;
+    this.attackTarget = target;
+    this.attackCooldown = 0;
+  }
+
+  findAdjacentTower() {
+    if (!Game.state) return null;
+    const offsets = ADJACENT_OFFSETS;
+    let best = null;
+    let bestHp = Infinity;
+    for (const [dx, dy] of offsets) {
+      const tc = this.currentCol + dx;
+      const tr = this.currentRow + dy;
+      for (const tower of Game.state.towers) {
+        if (tower.destroyed) continue;
+        if (tower.col === tc && tower.row === tr) {
+          if (tower.hp < bestHp) {
+            best = tower;
+            bestHp = tower.hp;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  performAttack() {
+    if (!this.attackTarget) return;
+    const dmg = this.attackMin + Math.random() * (this.attackMax - this.attackMin);
+    const amount = Math.round(dmg);
+
+    if (this.attackTarget === 'castle') {
+      if (Game.state) {
+        Game.state.castleHp -= amount;
+        if (Game.state.castleHp <= 0) {
+          Game.state.castleHp = 0;
+          Game.state.gameState = 'gameover';
+        }
+        // Impact particles at castle
+        const ts = Game.Config.TILE_SIZE;
+        const cx = Game.Map.castleCol * ts + ts / 2;
+        const cy = Game.Map.castleRow * ts + ts / 2;
+        const sp = Game.Renderer.worldToScreen(cx, cy);
+        Game.Particles.spawn(sp.x, sp.y - 20, 3, '#FF4400', {
+          speed: 40, life: 0.3, size: 2,
+        });
+      }
+    } else {
+      // Tower target
+      this.attackTarget.takeDamage(amount);
+      // Impact particles at tower
+      const sp = Game.Renderer.worldToScreen(this.attackTarget.x, this.attackTarget.y);
+      Game.Particles.spawn(sp.x, sp.y - 10, 3, '#FF8800', {
+        speed: 40, life: 0.3, size: 2,
+      });
+    }
   }
 
   distTo(x, y) {

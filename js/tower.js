@@ -23,6 +23,13 @@ Game.Tower = class Tower {
     this.projectileSpeed = def.projectileSpeed;
     this.projectileColor = def.projectileColor;
 
+    // HP
+    this.baseHp = def.hp;
+    this.maxHp = def.hp;
+    this.hp = def.hp;
+    this.destroyed = false;
+    this.hitFlash = 0;
+
     this.cooldown = 0;
     this.target = null;
     this.facing = 0;
@@ -59,6 +66,8 @@ Game.Tower = class Tower {
     this.damage = this.baseDamage * Math.pow(Game.Config.UPGRADE_DAMAGE_MULT, this.level - 1);
     this.range = this.baseRange * Math.pow(Game.Config.UPGRADE_RANGE_MULT, this.level - 1);
     this.fireRate = this.baseFireRate * Math.pow(Game.Config.UPGRADE_RATE_MULT, this.level - 1);
+    this.maxHp = Math.round(this.baseHp * Math.pow(Game.Config.UPGRADE_HP_MULT, this.level - 1));
+    this.hp = this.maxHp;
 
     // Level 3 special upgrades
     if (this.level === 3) {
@@ -87,11 +96,31 @@ Game.Tower = class Tower {
       damage: this.baseDamage * Math.pow(Game.Config.UPGRADE_DAMAGE_MULT, nl - 1),
       range: this.baseRange * Math.pow(Game.Config.UPGRADE_RANGE_MULT, nl - 1),
       fireRate: this.baseFireRate * Math.pow(Game.Config.UPGRADE_RATE_MULT, nl - 1),
+      hp: Math.round(this.baseHp * Math.pow(Game.Config.UPGRADE_HP_MULT, nl - 1)),
     };
   }
 
+  takeDamage(amount) {
+    if (this.destroyed) return;
+    this.hp -= amount;
+    this.hitFlash = 1;
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.destroyed = true;
+    }
+  }
+
+  regenerate(dt) {
+    if (this.destroyed) return;
+    if (this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * Game.Config.TOWER_REGEN_RATE * dt);
+    }
+  }
+
   update(dt, enemies, projectiles) {
+    if (this.destroyed) return;
     this.cooldown -= dt;
+    if (this.hitFlash > 0) this.hitFlash -= dt * 5;
 
     // Find target
     this.target = this.findTarget(enemies);
