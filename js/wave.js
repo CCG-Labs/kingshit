@@ -16,7 +16,7 @@ Game.WaveSpawner = {
     this.activeGroups = [];
     this.waveTimer = 0;
     this.betweenWaves = true;
-    this.betweenWaveTimer = 3; // Short initial delay
+    this.betweenWaveTimer = 3;
     this.allWavesDone = false;
   },
 
@@ -34,7 +34,7 @@ Game.WaveSpawner = {
       delay: g.delay,
       spawned: 0,
       timer: g.delay,
-      pathIndex: g.pathIndex || 0,
+      entryIndex: g.entryIndex || 0,
     }));
     this.activeGroups = [...this.groups];
     this.waveTimer = 0;
@@ -44,7 +44,7 @@ Game.WaveSpawner = {
 
   startEarly() {
     if (!this.betweenWaves) return 0;
-    const bonus = Math.round(this.betweenWaveTimer * 2); // Gold bonus for starting early
+    const bonus = Math.round(this.betweenWaveTimer * 2);
     this.betweenWaveTimer = 0;
     return bonus;
   },
@@ -73,7 +73,6 @@ Game.WaveSpawner = {
       g.timer -= dt;
 
       if (g.timer <= 0 && g.spawned < g.count) {
-        // Spawn enemy
         this.spawnEnemy(g, state);
         g.spawned++;
         g.timer = g.interval;
@@ -86,12 +85,10 @@ Game.WaveSpawner = {
   },
 
   spawnEnemy(group, state) {
-    const map = Game.Map.current;
-    const pathIdx = group.pathIndex % map.paths.length;
-    const path = map.paths[pathIdx];
-
-    const enemy = new Game.Enemy(group.enemyType, pathIdx, this.waveIndex);
-    enemy.setPath(path);
+    const entries = Game.Map.entries;
+    if (entries.length === 0) return;
+    const entry = entries[group.entryIndex % entries.length];
+    const enemy = new Game.Enemy(group.enemyType, entry.col, entry.row, this.waveIndex);
     state.enemies.push(enemy);
   },
 

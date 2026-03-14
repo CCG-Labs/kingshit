@@ -1,7 +1,7 @@
 window.Game = window.Game || {};
 
 Game.Enemy = class Enemy {
-  constructor(type, pathIndex, waveNum) {
+  constructor(type, entryCol, entryRow, waveNum) {
     const def = Game.Config.ENEMIES[type];
     const scaling = Math.pow(Game.Config.WAVE_HP_SCALING, waveNum - 1);
     const goldScaling = Math.pow(Game.Config.WAVE_GOLD_SCALING, waveNum - 1);
@@ -34,48 +34,35 @@ Game.Enemy = class Enemy {
     this.healRate = def.healRate || 0;
     this.healRange = def.healRange || 0;
 
-    // Path following
-    this.pathIndex = pathIndex || 0;
-    this.path = null; // set by spawner
-    this.waypointIndex = 0;
-    this.x = 0;
-    this.y = 0;
-    this.progress = 0; // 0-1 along total path
+    // Position (world pixels)
+    const ts = Game.Config.TILE_SIZE;
+    this.x = entryCol * ts + ts / 2;
+    this.y = entryRow * ts + ts / 2;
+
+    // Grid-based movement (flow field)
+    this.currentCol = entryCol;
+    this.currentRow = entryRow;
+    this.nextCol = -1;
+    this.nextRow = -1;
+
+    // Flying: direct path to castle
+    this.flyStartX = this.x;
+    this.flyStartY = this.y;
+    this.flyProgress = 0;
+
+    // Progress toward castle (0 = just spawned, 1 = at castle)
+    this.progress = 0;
 
     // Status effects
     this.statusEffects = [];
     this.stunned = false;
-
-    // For flying enemies - direct path
-    this.flyStart = null;
-    this.flyEnd = null;
-    this.flyProgress = 0;
 
     // Visual
     this.hitFlash = 0;
     this.facing = 0;
   }
 
-  setPath(path) {
-    this.path = path;
-    if (this.flying) {
-      this.flyStart = { x: path[0].x, y: path[0].y };
-      this.flyEnd = { x: path[path.length - 1].x, y: path[path.length - 1].y };
-      this.x = this.flyStart.x;
-      this.y = this.flyStart.y;
-      this.flyProgress = 0;
-      const dx = this.flyEnd.x - this.flyStart.x;
-      const dy = this.flyEnd.y - this.flyStart.y;
-      this.flyDist = Math.sqrt(dx * dx + dy * dy);
-    } else {
-      this.x = path[0].x;
-      this.y = path[0].y;
-      this.waypointIndex = 1;
-    }
-  }
-
   update(dt, enemies) {
-    // Update status effects
     this.updateStatusEffects(dt);
 
     if (this.stunned) return;
@@ -114,8 +101,14 @@ Game.Enemy = class Enemy {
   }
 
   updateFlying(dt, speed) {
-    const moveAmount = (speed / this.flyDist) * dt;
-    this.flyProgress += moveAmount;
+    const ts = Game.Config.TILE_SIZE;
+    const castleX = Game.Map.castleCol * ts + ts / 2;
+    const castleY = Game.Map.castleRow * ts + ts / 2;
+    const dx = castleX - this.flyStartX;
+    const dy = castleY - this.flyStartY;
+    const totalDist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    this.flyProgress += (speed / totalDist) * dt;
     this.progress = this.flyProgress;
 
     if (this.flyProgress >= 1) {
@@ -123,45 +116,56 @@ Game.Enemy = class Enemy {
       return;
     }
 
-    this.x = this.flyStart.x + (this.flyEnd.x - this.flyStart.x) * this.flyProgress;
-    this.y = this.flyStart.y + (this.flyEnd.y - this.flyStart.y) * this.flyProgress;
-    this.facing = Math.atan2(this.flyEnd.y - this.flyStart.y, this.flyEnd.x - this.flyStart.x);
+    this.x = this.flyStartX + dx * this.flyProgress;
+    this.y = this.flyStartY + dy * this.flyProgress;
+    this.facing = Math.atan2(dy, dx);
   }
 
   updateGroundMovement(dt, speed) {
-    if (this.waypointIndex >= this.path.length) {
-      this.escaped = true;
-      return;
+    const ts = Game.Config.TILE_SIZE;
+    const field = Game.Map.flowField;
+
+    // Look up next tile if needed
+    if (this.nextCol < 0) {
+      if (!field || !field[this.currentRow] || !field[this.currentRow][this.currentCol]) {
+        // No path available - stuck
+        return;
+      }
+      const dir = field[this.currentRow][this.currentCol];
+      if (dir.dx === 0 && dir.dy === 0) {
+        // At castle
+        this.escaped = true;
+        return;
+      }
+      this.nextCol = this.currentCol + dir.dx;
+      this.nextRow = this.currentRow + dir.dy;
     }
 
-    const target = this.path[this.waypointIndex];
-    const dx = target.x - this.x;
-    const dy = target.y - this.y;
+    // Move toward next tile center
+    const targetX = this.nextCol * ts + ts / 2;
+    const targetY = this.nextRow * ts + ts / 2;
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     this.facing = Math.atan2(dy, dx);
 
     if (dist < speed * dt) {
-      this.x = target.x;
-      this.y = target.y;
-      this.waypointIndex++;
+      this.x = targetX;
+      this.y = targetY;
+      this.currentCol = this.nextCol;
+      this.currentRow = this.nextRow;
+      this.nextCol = -1; // look up next direction on next frame
     } else {
       this.x += (dx / dist) * speed * dt;
       this.y += (dy / dist) * speed * dt;
     }
 
-    // Calculate progress along path
-    this.progress = (this.waypointIndex - 1 + (1 - dist / this.getSegmentLength())) / (this.path.length - 1);
-    this.progress = Math.max(0, Math.min(1, this.progress));
-  }
-
-  getSegmentLength() {
-    if (this.waypointIndex <= 0 || this.waypointIndex >= this.path.length) return 1;
-    const a = this.path[this.waypointIndex - 1];
-    const b = this.path[this.waypointIndex];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    return Math.sqrt(dx * dx + dy * dy) || 1;
+    // Update progress based on flow field distance
+    if (field && field[this.currentRow] && field[this.currentRow][this.currentCol]) {
+      const maxDist = Game.Map.getMaxDist();
+      this.progress = 1 - (field[this.currentRow][this.currentCol].dist / maxDist);
+    }
   }
 
   updateStatusEffects(dt) {
@@ -195,7 +199,6 @@ Game.Enemy = class Enemy {
       amount = Math.max(1, amount - this.armor);
     }
 
-    // Shield absorbs damage first
     if (this.shieldHp > 0) {
       if (amount <= this.shieldHp) {
         this.shieldHp -= amount;
@@ -216,7 +219,6 @@ Game.Enemy = class Enemy {
   }
 
   applySlow(amount, duration) {
-    // Replace existing slow if stronger
     const existing = this.statusEffects.find(e => e.type === 'slow');
     if (existing) {
       if (amount >= existing.amount) {

@@ -52,7 +52,7 @@ Game.Main = {
     Game.WaveSpawner.init(mapData.waves);
 
     Game.state = {
-      gameState: 'playing',
+      gameState: 'placeCastle', // starts in castle placement phase
       towers: [],
       enemies: [],
       projectiles: [],
@@ -65,17 +65,12 @@ Game.Main = {
     };
 
     Game.Particles.clear();
-    Game.Renderer._decoMapRef = null; // Force deco map rebuild
-    // Center camera on entry point
-    if (mapData.paths && mapData.paths[0] && mapData.paths[0].length > 2) {
-      const mid = mapData.paths[0][Math.floor(mapData.paths[0].length / 2)];
-      Game.Renderer.centerOnWorld(mid.x, mid.y);
-    } else {
-      Game.Renderer.centerOnGrid(
-        Math.floor(Game.Config.GRID_COLS / 2),
-        Math.floor(Game.Config.GRID_ROWS / 2)
-      );
-    }
+    Game.Renderer._decoMapRef = null;
+    // Center camera on map center
+    Game.Renderer.centerOnGrid(
+      Math.floor(Game.Config.GRID_COLS / 2),
+      Math.floor(Game.Config.GRID_ROWS / 2)
+    );
     this.menuState = 'playing';
   },
 
@@ -288,6 +283,7 @@ Game.Main = {
 
     if (state.paused) return;
     if (state.gameState !== 'playing') return;
+    if (Game.Map.castleCol < 0) return; // no castle yet
 
     const gameDt = dt * state.gameSpeed;
 
@@ -363,6 +359,40 @@ Game.Main = {
     const state = Game.state;
     const input = Game.Input;
 
+    // ── Castle placement phase ──
+    if (state.gameState === 'placeCastle') {
+      if (input.clicked && input.clickPos) {
+        const grid = Game.Renderer.screenToGrid(input.clickPos.x, input.clickPos.y);
+        if (Game.Map.canPlaceCastle(grid.col, grid.row)) {
+          Game.Map.placeCastle(grid.col, grid.row);
+          Game.Map.computeFlowField(state.towers);
+          // Check all entries can reach castle
+          let allReachable = true;
+          for (const entry of Game.Map.entries) {
+            const f = Game.Map.flowField && Game.Map.flowField[entry.row] && Game.Map.flowField[entry.row][entry.col];
+            if (!f) { allReachable = false; break; }
+          }
+          if (allReachable) {
+            state.gameState = 'playing';
+            Game.Renderer.centerOnGrid(grid.col, grid.row);
+            const sp = Game.Renderer.worldToScreen(
+              grid.col * Game.Config.TILE_SIZE + Game.Config.TILE_SIZE / 2,
+              grid.row * Game.Config.TILE_SIZE + Game.Config.TILE_SIZE / 2
+            );
+            Game.Particles.spawn(sp.x, sp.y, 12, '#FFD700', {
+              speed: 80, life: 0.6, size: 3, glow: true,
+            });
+          } else {
+            // Invalid position - reset
+            Game.Map.castleCol = -1;
+            Game.Map.castleRow = -1;
+          }
+        }
+      }
+      return;
+    }
+
+    // ── Normal gameplay input ──
     if (input.isKeyPressed(' ')) {
       state.paused = !state.paused;
     }
@@ -414,6 +444,8 @@ Game.Main = {
         const idx = state.towers.indexOf(state.selectedTower);
         if (idx >= 0) state.towers.splice(idx, 1);
         state.selectedTower = null;
+        // Recompute flow field after selling
+        Game.Map.computeFlowField(state.towers);
       }
     }
 
@@ -452,7 +484,8 @@ Game.Main = {
             state.gold -= def.cost;
             const tower = new Game.Tower(state.placingTower, col, row);
             state.towers.push(tower);
-            // Placement particle burst
+            // Recompute flow field after placing tower
+            Game.Map.computeFlowField(state.towers);
             const tsp = Game.Renderer.worldToScreen(tower.x, tower.y);
             Game.Particles.spawn(tsp.x, tsp.y, 6, def.color, {
               speed: 60, life: 0.3, size: 2, glow: true,

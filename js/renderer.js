@@ -443,8 +443,18 @@ Game.Renderer = {
     // Dynamic overlays
     this._drawOverlays(ctx, state);
 
+    // Castle
+    if (Game.Map.castleCol >= 0) {
+      this._drawCastle(ctx);
+    }
+
+    // Castle placement phase overlay
+    if (state.gameState === 'placeCastle') {
+      this._drawCastlePlacementOverlay(ctx);
+    }
+
     // Placement preview
-    if (state.placingTower) this._drawPlacementPreview(ctx, state);
+    if (state.placingTower && state.gameState === 'playing') this._drawPlacementPreview(ctx, state);
     if (state.selectedTower) {
       const sp = this.worldToScreen(state.selectedTower.x, state.selectedTower.y);
       this._drawRangeEllipse(ctx, sp.x, sp.y - 6, state.selectedTower.range, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.2)');
@@ -567,6 +577,106 @@ Game.Renderer = {
     ctx.setLineDash([4, 4]);
     ctx.stroke();
     ctx.setLineDash([]);
+  },
+
+  // ── Castle drawing ─────────────────────────────────────
+
+  _drawCastle(ctx) {
+    const col = Game.Map.castleCol;
+    const row = Game.Map.castleRow;
+    const sp = this.gridToScreen(col + 0.5, row + 0.5);
+    const x = sp.x, y = sp.y;
+
+    // Stone foundation
+    this._drawBlock(ctx, col, row, 8, '#807060', '#605040', '#504030');
+
+    // Castle keep - front wall
+    const wg = ctx.createLinearGradient(x - 14, y, x + 14, y);
+    wg.addColorStop(0, '#887766'); wg.addColorStop(0.5, '#998877'); wg.addColorStop(1, '#776655');
+    ctx.fillStyle = wg;
+    ctx.fillRect(x - 14, y - 42, 28, 34);
+    // Side wall
+    ctx.fillStyle = '#665544';
+    ctx.beginPath();
+    ctx.moveTo(x + 14, y - 42); ctx.lineTo(x + 20, y - 45);
+    ctx.lineTo(x + 20, y - 11); ctx.lineTo(x + 14, y - 8);
+    ctx.closePath(); ctx.fill();
+    // Battlements
+    ctx.fillStyle = '#887766';
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(x - 13 + i * 6, y - 48, 4, 6);
+    }
+    // Gate
+    ctx.fillStyle = '#3A2A1A';
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y - 8); ctx.lineTo(x - 5, y - 20);
+    ctx.arc(x, y - 20, 5, Math.PI, 0);
+    ctx.lineTo(x + 5, y - 8);
+    ctx.closePath(); ctx.fill();
+    // Gate portcullis
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 8); ctx.lineTo(x - 4, y - 19);
+    ctx.moveTo(x, y - 8); ctx.lineTo(x, y - 24);
+    ctx.moveTo(x + 4, y - 8); ctx.lineTo(x + 4, y - 19);
+    ctx.moveTo(x - 4, y - 14); ctx.lineTo(x + 4, y - 14);
+    ctx.stroke();
+    // Arrow slits
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - 10, y - 32, 2, 5);
+    ctx.fillRect(x + 8, y - 32, 2, 5);
+    // Tower turrets (left and right)
+    ctx.fillStyle = '#887766';
+    ctx.fillRect(x - 16, y - 52, 8, 44);
+    ctx.fillRect(x + 8, y - 52, 8, 44);
+    // Turret tops (conical)
+    ctx.fillStyle = '#4444AA';
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y - 58); ctx.lineTo(x - 17, y - 48); ctx.lineTo(x - 7, y - 48);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y - 58); ctx.lineTo(x + 7, y - 48); ctx.lineTo(x + 17, y - 48);
+    ctx.closePath(); ctx.fill();
+    // Banner
+    ctx.fillStyle = '#CC2222';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 52); ctx.lineTo(x + 10, y - 48);
+    ctx.lineTo(x, y - 44); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#555'; ctx.fillRect(x - 1, y - 56, 2, 14);
+    // Glow at base
+    ctx.save();
+    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 8 + Math.sin(this.time * 2) * 3;
+    ctx.fillStyle = 'rgba(255,215,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 4, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  },
+
+  // ── Castle placement overlay ──────────────────────────────
+
+  _drawCastlePlacementOverlay(ctx) {
+    const grid = Game.Input.getGridPos();
+    const col = grid.col, row = grid.row;
+    const valid = Game.Map.canPlaceCastle(col, row);
+
+    if (col >= 0 && col < Game.Config.GRID_COLS && row >= 0 && row < Game.Config.GRID_ROWS) {
+      this._tileDiamond(ctx, col, row);
+      ctx.fillStyle = valid ? 'rgba(255,215,0,0.25)' : 'rgba(255,0,0,0.15)';
+      ctx.fill();
+      ctx.strokeStyle = valid ? 'rgba(255,215,0,0.6)' : 'rgba(255,0,0,0.4)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Instruction text
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, this.canvas.width, 36);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click to place your castle', this.canvas.width / 2, 24);
+    ctx.textAlign = 'left';
   },
 
   // ── Tower drawing (iso) ─────────────────────────────────

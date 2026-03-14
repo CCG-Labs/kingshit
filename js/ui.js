@@ -5,6 +5,7 @@ Game.UI = {
   tooltipTimer: 0,
 
   draw(ctx, state, canvas) {
+    if (state.gameState === 'placeCastle') return; // no UI during castle placement
     this.drawHUD(ctx, state, canvas);
     this.drawTowerBar(ctx, state, canvas);
 
