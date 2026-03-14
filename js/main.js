@@ -7,6 +7,8 @@ Game.Main = {
   ctx: null,
   lastFrame: 0,
   menuState: 'menu', // 'menu', 'playing'
+  menuTime: 0,
+  menuParticles: [],
 
   init() {
     this.canvas = document.getElementById('game');
@@ -26,6 +28,23 @@ Game.Main = {
     this.menuState = 'menu';
     Game.state = null;
     Game.Particles.clear();
+    this.menuTime = 0;
+    this._initMenuParticles();
+  },
+
+  _initMenuParticles() {
+    this.menuParticles = [];
+    for (let i = 0; i < 40; i++) {
+      this.menuParticles.push({
+        x: Math.random() * this.canvas.width,
+        y: Math.random() * this.canvas.height,
+        vx: (Math.random() - 0.5) * 15,
+        vy: -10 - Math.random() * 20,
+        size: 1 + Math.random() * 2,
+        alpha: 0.2 + Math.random() * 0.4,
+        color: Math.random() < 0.5 ? '#FFD700' : '#FF8800',
+      });
+    }
   },
 
   startMap(mapData) {
@@ -46,19 +65,18 @@ Game.Main = {
     };
 
     Game.Particles.clear();
+    Game.Renderer.mapCache = null; // Force map rebuild
     this.menuState = 'playing';
   },
 
   loop(now) {
     let dt = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
-
-    // Cap dt to prevent tunneling on tab-switch
     dt = Math.min(dt, 0.05);
 
     if (this.menuState === 'menu') {
       this.updateMenu(dt);
-      this.drawMenu();
+      this.drawMenu(dt);
     } else {
       this.updateGame(dt);
       this.drawGame(dt);
@@ -69,13 +87,21 @@ Game.Main = {
   },
 
   updateMenu(dt) {
-    const input = Game.Input;
+    this.menuTime += dt;
 
+    // Update floating particles
+    for (const p of this.menuParticles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.y < -10) { p.y = this.canvas.height + 10; p.x = Math.random() * this.canvas.width; }
+      if (p.x < -10) p.x = this.canvas.width + 10;
+      if (p.x > this.canvas.width + 10) p.x = -10;
+    }
+
+    const input = Game.Input;
     if (input.clicked && input.clickPos) {
       const x = input.clickPos.x;
       const y = input.clickPos.y;
-
-      // Check map buttons
       if (this.mapButtons) {
         for (const btn of this.mapButtons) {
           if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
@@ -87,25 +113,84 @@ Game.Main = {
     }
   },
 
-  drawMenu() {
+  drawMenu(dt) {
     const ctx = this.ctx;
     const canvas = this.canvas;
-    const C = Game.Config.COLORS;
+    const t = this.menuTime;
 
-    ctx.fillStyle = '#1a1a2e';
+    // Background gradient
+    const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    bg.addColorStop(0, '#0a0a1e');
+    bg.addColorStop(0.4, '#121228');
+    bg.addColorStop(1, '#0a0a16');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Title
+    // Subtle grid pattern
+    ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+
+    // Floating particles
+    for (const p of this.menuParticles) {
+      ctx.globalAlpha = p.alpha * (0.5 + Math.sin(t * 2 + p.x * 0.01) * 0.5);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Radial glow behind title
+    const titleY = 72;
+    const glow = ctx.createRadialGradient(
+      canvas.width / 2, titleY, 0,
+      canvas.width / 2, titleY, 200
+    );
+    glow.addColorStop(0, 'rgba(255,180,0,0.08)');
+    glow.addColorStop(0.5, 'rgba(255,140,0,0.03)');
+    glow.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, canvas.width, 200);
+
+    // Title with glow
+    ctx.save();
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 20 + Math.sin(t * 1.5) * 8;
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 42px monospace';
+    ctx.font = 'bold 48px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('KINGSHIT', canvas.width / 2, 80);
+    ctx.fillText('KINGSHIT', canvas.width / 2, titleY);
+    ctx.restore();
 
-    ctx.fillStyle = '#AAAAAA';
-    ctx.font = '14px monospace';
-    ctx.fillText('Tower Defense - No Bullshit Edition', canvas.width / 2, 110);
+    // Subtitle
+    ctx.fillStyle = '#666688';
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tower Defense \u2014 No Bullshit Edition', canvas.width / 2, titleY + 30);
 
-    // Map selection
+    // Decorative line under subtitle
+    const lineW = 200;
+    const lineY = titleY + 44;
+    const lineGrad = ctx.createLinearGradient(canvas.width / 2 - lineW / 2, lineY, canvas.width / 2 + lineW / 2, lineY);
+    lineGrad.addColorStop(0, 'rgba(255,215,0,0)');
+    lineGrad.addColorStop(0.3, 'rgba(255,215,0,0.3)');
+    lineGrad.addColorStop(0.5, 'rgba(255,215,0,0.5)');
+    lineGrad.addColorStop(0.7, 'rgba(255,215,0,0.3)');
+    lineGrad.addColorStop(1, 'rgba(255,215,0,0)');
+    ctx.fillStyle = lineGrad;
+    ctx.fillRect(canvas.width / 2 - lineW / 2, lineY, lineW, 1);
+
+    // Map selection cards
     const maps = [
       { key: 'forest', data: Game.Maps.forest },
       { key: 'crossroads', data: Game.Maps.crossroads },
@@ -113,110 +198,163 @@ Game.Main = {
     ];
 
     this.mapButtons = [];
-    const btnW = 280;
-    const btnH = 80;
-    const startY = 160;
-    const gap = 15;
+    const cardW = 400;
+    const cardH = 82;
+    const startY = titleY + 65;
+    const gap = 10;
 
     for (let i = 0; i < maps.length; i++) {
       const map = maps[i].data;
-      const bx = (canvas.width - btnW) / 2;
-      const by = startY + i * (btnH + gap);
+      const bx = (canvas.width - cardW) / 2;
+      const by = startY + i * (cardH + gap);
 
-      this.mapButtons.push({ x: bx, y: by, w: btnW, h: btnH, mapData: map });
+      this.mapButtons.push({ x: bx, y: by, w: cardW, h: cardH, mapData: map });
 
-      // Hover check
       const mx = Game.Input.mouse.x;
       const my = Game.Input.mouse.y;
-      const hovered = mx >= bx && mx <= bx + btnW && my >= by && my <= by + btnH;
+      const hovered = mx >= bx && mx <= bx + cardW && my >= by && my <= by + cardH;
 
-      ctx.fillStyle = hovered ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
-      ctx.fillRect(bx, by, btnW, btnH);
-      ctx.strokeStyle = hovered ? '#FFD700' : '#666666';
+      // Card background
+      const cardBg = hovered ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+      const cardBorder = hovered ? 'rgba(255,215,0,0.5)' : 'rgba(100,100,120,0.25)';
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      this._roundRect(ctx, bx + 2, by + 2, cardW, cardH, 6);
+      ctx.fill();
+
+      // Background
+      ctx.fillStyle = cardBg;
+      this._roundRect(ctx, bx, by, cardW, cardH, 6);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = cardBorder;
       ctx.lineWidth = hovered ? 2 : 1;
-      ctx.strokeRect(bx, by, btnW, btnH);
+      this._roundRect(ctx, bx, by, cardW, cardH, 6);
+      ctx.stroke();
+
+      // Hover glow
+      if (hovered) {
+        const hg = ctx.createLinearGradient(bx, by, bx, by + cardH);
+        hg.addColorStop(0, 'rgba(255,215,0,0.06)');
+        hg.addColorStop(1, 'rgba(255,215,0,0)');
+        ctx.fillStyle = hg;
+        this._roundRect(ctx, bx, by, cardW, cardH, 6);
+        ctx.fill();
+      }
+
+      // Difficulty indicator (left accent bar)
+      const diffColors = ['#44AA44', '#DDAA00', '#DD4444'];
+      const diffColor = diffColors[map.difficulty - 1] || '#888';
+      ctx.fillStyle = diffColor;
+      this._roundRect(ctx, bx, by, 4, cardH, 2);
+      ctx.fill();
+
+      // Clip text content to card bounds
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bx, by, cardW, cardH);
+      ctx.clip();
 
       // Map name
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 16px monospace';
+      ctx.fillStyle = hovered ? '#FFFFFF' : '#DDDDDD';
+      ctx.font = 'bold 15px monospace';
       ctx.textAlign = 'left';
-      ctx.fillText(map.name, bx + 12, by + 24);
+      ctx.fillText(map.name, bx + 16, by + 24);
 
-      // Difficulty
+      // Difficulty stars + label on same line
+      const diffLabels = ['Easy', 'Medium', 'Hard'];
       ctx.fillStyle = '#FFD700';
-      ctx.font = '12px monospace';
-      ctx.fillText('★'.repeat(map.difficulty) + '☆'.repeat(3 - map.difficulty), bx + 12, by + 42);
+      ctx.font = '11px monospace';
+      ctx.fillText('\u2605'.repeat(map.difficulty) + '\u2606'.repeat(3 - map.difficulty), bx + 16, by + 40);
+      ctx.fillStyle = diffColor;
+      ctx.font = '10px monospace';
+      ctx.fillText(diffLabels[map.difficulty - 1] || '???', bx + 76, by + 40);
 
       // Description
-      ctx.fillStyle = '#AAAAAA';
+      ctx.fillStyle = '#888899';
       ctx.font = '11px monospace';
-      ctx.fillText(map.description, bx + 12, by + 60);
+      ctx.fillText(map.description, bx + 16, by + 58);
 
-      // Wave count
-      ctx.fillStyle = '#888888';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${map.waves.length} waves`, bx + btnW - 12, by + 24);
+      // Wave count badge
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      this._roundRect(ctx, bx + cardW - 72, by + 10, 58, 20, 3);
+      ctx.fill();
+      ctx.fillStyle = '#888899';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(map.waves.length + ' waves', bx + cardW - 43, by + 24);
+
+      ctx.restore();
     }
 
-    // Controls help
+    // Controls help at bottom
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#666666';
-    ctx.font = '11px monospace';
-    const helpY = canvas.height - 60;
-    ctx.fillText('Controls: 1-6 select tower | Click to place | Right-click to cancel', canvas.width / 2, helpY);
-    ctx.fillText('U=Upgrade | S=Sell | T=Target mode | Space=Pause | Enter=Start wave early', canvas.width / 2, helpY + 16);
-    ctx.fillText('Mouse wheel or +/- for game speed', canvas.width / 2, helpY + 32);
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#444466';
+    const helpY = canvas.height - 50;
+    ctx.fillText('1-6 select tower | Click to place | Right-click to cancel', canvas.width / 2, helpY);
+    ctx.fillText('U=Upgrade | S=Sell | T=Target mode | Space=Pause | Enter=Start wave early', canvas.width / 2, helpY + 14);
+    ctx.fillText('+/- for game speed', canvas.width / 2, helpY + 28);
 
     ctx.textAlign = 'left';
+  },
+
+  _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   },
 
   updateGame(dt) {
     const state = Game.state;
     if (!state) return;
 
-    // Handle input
     this.handleGameInput();
 
     if (state.paused) return;
     if (state.gameState !== 'playing') return;
 
-    // Apply game speed
     const gameDt = dt * state.gameSpeed;
 
-    // Update wave spawner
     Game.WaveSpawner.update(gameDt, state);
 
-    // Update enemies
     for (const enemy of state.enemies) {
       if (!enemy.dead && !enemy.escaped) {
         enemy.update(gameDt, state.enemies);
       }
     }
 
-    // Update towers
     for (const tower of state.towers) {
       tower.update(gameDt, state.enemies, state.projectiles);
     }
 
-    // Update projectiles
     for (const proj of state.projectiles) {
       if (!proj.dead) proj.update(gameDt);
     }
 
-    // Update particles
     Game.Particles.update(gameDt);
 
-    // Process dead enemies (gold, lives)
     for (const enemy of state.enemies) {
       if (enemy.dead && !enemy._processed) {
         enemy._processed = true;
         state.gold += enemy.gold;
         Game.Particles.goldPopup(enemy.x, enemy.y, enemy.gold);
-        Game.Particles.spawn(enemy.x, enemy.y, 8, enemy.color, {
-          speed: 80, life: 0.4, size: 3,
+        Game.Particles.spawn(enemy.x, enemy.y, 10, enemy.color, {
+          speed: 100, life: 0.5, size: 3, glow: true,
         });
         if (enemy.type === 'boss') {
           Game.Renderer.shake(6, 0.3);
+          Game.Particles.explosion(enemy.x, enemy.y, 40, '#FF4400');
         }
       }
       if (enemy.escaped && !enemy._processed) {
@@ -231,10 +369,8 @@ Game.Main = {
       }
     }
 
-    // Check wave completion (before cleanup so isWaveComplete sees all enemies)
     const waveComplete = Game.WaveSpawner.isWaveComplete(state.enemies);
 
-    // Cleanup dead entities
     state.enemies = state.enemies.filter(e => !e.dead && !e.escaped);
     state.projectiles = state.projectiles.filter(p => !p.dead);
 
@@ -244,7 +380,6 @@ Game.Main = {
           state.gameState = 'victory';
         }
       } else {
-        // Interest
         const interest = Math.min(
           Math.round(state.gold * Game.Config.INTEREST_RATE),
           Game.Config.INTEREST_CAP
@@ -262,12 +397,10 @@ Game.Main = {
     const state = Game.state;
     const input = Game.Input;
 
-    // Pause
     if (input.isKeyPressed(' ')) {
       state.paused = !state.paused;
     }
 
-    // Game speed
     if (input.isKeyPressed('+') || input.isKeyPressed('=')) {
       const speeds = Game.Config.GAME_SPEEDS;
       const idx = speeds.indexOf(state.gameSpeed);
@@ -279,7 +412,6 @@ Game.Main = {
       state.gameSpeed = speeds[Math.max(idx - 1, 0)];
     }
 
-    // Tower hotkeys
     const towerOrder = Game.Config.TOWER_ORDER;
     for (let i = 0; i < towerOrder.length; i++) {
       if (input.isKeyPressed(String(i + 1))) {
@@ -292,7 +424,6 @@ Game.Main = {
       }
     }
 
-    // Escape / right-click cancel
     if (input.isKeyPressed('Escape') || input.rightClicked) {
       if (state.placingTower) {
         state.placingTower = null;
@@ -301,7 +432,6 @@ Game.Main = {
       }
     }
 
-    // Upgrade hotkey
     if (input.isKeyPressed('u') || input.isKeyPressed('U')) {
       if (state.selectedTower) {
         const cost = state.selectedTower.getUpgradeCost();
@@ -312,7 +442,6 @@ Game.Main = {
       }
     }
 
-    // Sell hotkey
     if (input.isKeyPressed('s') || input.isKeyPressed('S')) {
       if (state.selectedTower) {
         state.gold += state.selectedTower.getSellValue();
@@ -322,7 +451,6 @@ Game.Main = {
       }
     }
 
-    // Target mode cycle
     if (input.isKeyPressed('t') || input.isKeyPressed('T')) {
       if (state.selectedTower) {
         const modes = Game.Config.TARGET_MODES;
@@ -331,7 +459,6 @@ Game.Main = {
       }
     }
 
-    // Start early
     if (input.isKeyPressed('Enter') && Game.WaveSpawner.betweenWaves) {
       const bonus = Game.WaveSpawner.startEarly();
       state.gold += bonus;
@@ -340,38 +467,35 @@ Game.Main = {
       }
     }
 
-    // Click handling
     if (input.clicked && input.clickPos) {
       const x = input.clickPos.x;
       const y = input.clickPos.y;
 
-      // UI gets first crack
       if (Game.UI.handleClick(state, x, y, this.canvas)) {
         return;
       }
 
-      // Game area click
       const ts = Game.Config.TILE_SIZE;
       const col = Math.floor(x / ts);
       const row = Math.floor(y / ts);
 
       if (state.placingTower) {
-        // Place tower
         if (Game.Map.canPlace(col, row, state.towers)) {
           const def = Game.Config.TOWERS[state.placingTower];
           if (state.gold >= def.cost) {
             state.gold -= def.cost;
             const tower = new Game.Tower(state.placingTower, col, row);
             state.towers.push(tower);
-            // Don't clear placingTower so user can place multiple
-            // Unless they can't afford another
+            // Placement particle burst
+            Game.Particles.spawn(tower.x, tower.y, 6, def.color, {
+              speed: 60, life: 0.3, size: 2, glow: true,
+            });
             if (state.gold < def.cost) {
               state.placingTower = null;
             }
           }
         }
       } else {
-        // Select/deselect tower
         const clickedTower = state.towers.find(t => t.col === col && t.row === row);
         state.selectedTower = clickedTower || null;
       }
