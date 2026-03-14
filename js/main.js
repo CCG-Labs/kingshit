@@ -12,13 +12,8 @@ Game.Main = {
 
   init() {
     this.canvas = document.getElementById('game');
-    // Compute isometric canvas dimensions
-    const cols = Game.Config.GRID_COLS;
-    const rows = Game.Config.GRID_ROWS;
-    const tw = Game.Config.ISO_TILE_W;
-    const th = Game.Config.ISO_TILE_H;
-    this.canvas.width = (cols + rows) * tw / 2 + 24;
-    this.canvas.height = (cols + rows) * th / 2 + 130;
+    this.canvas.width = Game.Config.VIEWPORT_W;
+    this.canvas.height = Game.Config.VIEWPORT_H;
     this.ctx = this.canvas.getContext('2d');
 
     Game.Input.init(this.canvas);
@@ -70,7 +65,17 @@ Game.Main = {
     };
 
     Game.Particles.clear();
-    Game.Renderer.mapCache = null; // Force map rebuild
+    Game.Renderer._decoMapRef = null; // Force deco map rebuild
+    // Center camera on entry point
+    if (mapData.paths && mapData.paths[0] && mapData.paths[0].length > 2) {
+      const mid = mapData.paths[0][Math.floor(mapData.paths[0].length / 2)];
+      Game.Renderer.centerOnWorld(mid.x, mid.y);
+    } else {
+      Game.Renderer.centerOnGrid(
+        Math.floor(Game.Config.GRID_COLS / 2),
+        Math.floor(Game.Config.GRID_ROWS / 2)
+      );
+    }
     this.menuState = 'playing';
   },
 
@@ -275,6 +280,9 @@ Game.Main = {
   updateGame(dt) {
     const state = Game.state;
     if (!state) return;
+
+    // Edge scrolling
+    Game.Input.updateEdgeScroll(dt);
 
     this.handleGameInput();
 

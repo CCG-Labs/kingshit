@@ -3,8 +3,14 @@ window.Game = window.Game || {};
 Game.Config = {
   // Grid (world-space logic grid)
   TILE_SIZE: 48,
-  GRID_COLS: 20,
-  GRID_ROWS: 14,
+  GRID_COLS: 100,
+  GRID_ROWS: 100,
+
+  // Viewport
+  VIEWPORT_W: 1100,
+  VIEWPORT_H: 670,
+  EDGE_SCROLL_MARGIN: 40,
+  EDGE_SCROLL_SPEED: 400,
 
   // Isometric projection
   ISO_TILE_W: 64,

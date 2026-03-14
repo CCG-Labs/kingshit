@@ -10,8 +10,13 @@ Game.Renderer = {
   // Iso projection
   isoTileW: 0,
   isoTileH: 0,
-  isoOriginX: 0,
-  isoOriginY: 0,
+  // World-space origin (top corner of tile 0,0) - fixed, not affected by camera
+  isoWorldOriginX: 0,
+  isoWorldOriginY: 0,
+
+  // Camera (scroll offset in screen pixels)
+  camX: 0,
+  camY: 0,
 
   // Cache
   mapCache: null,
@@ -26,8 +31,11 @@ Game.Renderer = {
 
     this.isoTileW = Game.Config.ISO_TILE_W;
     this.isoTileH = Game.Config.ISO_TILE_H;
-    this.isoOriginX = Game.Config.GRID_ROWS * this.isoTileW / 2 + 12;
-    this.isoOriginY = 38;
+    // World origin: the top corner of tile (0,0) in world iso space (before camera)
+    this.isoWorldOriginX = Game.Config.GRID_ROWS * this.isoTileW / 2 + 12;
+    this.isoWorldOriginY = 40;
+    this.camX = 0;
+    this.camY = 0;
   },
 
   shake(intensity, duration) {
@@ -35,13 +43,39 @@ Game.Renderer = {
     this.screenShake = duration;
   },
 
+  // Center camera on a world position
+  centerOnWorld(wx, wy) {
+    const sp = this._worldToIso(wx, wy);
+    this.camX = sp.x - this.canvas.width / 2;
+    this.camY = sp.y - this.canvas.height / 2;
+  },
+
+  // Center camera on a grid cell
+  centerOnGrid(col, row) {
+    const sp = this._gridToIso(col + 0.5, row + 0.5);
+    this.camX = sp.x - this.canvas.width / 2;
+    this.camY = sp.y - this.canvas.height / 2;
+  },
+
   // ── Isometric projection ─────────────────────────────────
 
-  gridToScreen(col, row) {
+  // Grid/world to absolute iso coords (before camera)
+  _gridToIso(col, row) {
     return {
-      x: this.isoOriginX + (col - row) * this.isoTileW / 2,
-      y: this.isoOriginY + (col + row) * this.isoTileH / 2,
+      x: this.isoWorldOriginX + (col - row) * this.isoTileW / 2,
+      y: this.isoWorldOriginY + (col + row) * this.isoTileH / 2,
     };
+  },
+
+  _worldToIso(wx, wy) {
+    const ts = Game.Config.TILE_SIZE;
+    return this._gridToIso(wx / ts, wy / ts);
+  },
+
+  // Grid/world to screen coords (with camera offset)
+  gridToScreen(col, row) {
+    const iso = this._gridToIso(col, row);
+    return { x: iso.x - this.camX, y: iso.y - this.camY };
   },
 
   worldToScreen(wx, wy) {
@@ -49,11 +83,15 @@ Game.Renderer = {
     return this.gridToScreen(wx / ts, wy / ts);
   },
 
+  // Screen to grid (accounts for camera)
   screenToGrid(sx, sy) {
     const hw = this.isoTileW / 2;
     const hh = this.isoTileH / 2;
-    const dx = sx - this.isoOriginX;
-    const dy = sy - this.isoOriginY;
+    // Convert screen to absolute iso by adding camera offset
+    const absX = sx + this.camX;
+    const absY = sy + this.camY;
+    const dx = absX - this.isoWorldOriginX;
+    const dy = absY - this.isoWorldOriginY;
     return {
       col: Math.floor((dx / hw + dy / hh) / 2),
       row: Math.floor((dy / hh - dx / hw) / 2),
@@ -112,44 +150,92 @@ Game.Renderer = {
     return (this._seed - 1) / 2147483646;
   },
 
-  // ── Map cache ────────────────────────────────────────────
+  // ── Map rendering (viewport-culled, no full cache) ──────
 
-  buildMapCache() {
+  // Pre-compute decoration map (which blocked tiles get trees/rocks)
+  _decoMap: null,
+  _decoMapRef: null,
+
+  _ensureDecoMap() {
     const map = Game.Map.current;
-    if (!map) return;
-    const off = document.createElement('canvas');
-    off.width = this.canvas.width;
-    off.height = this.canvas.height;
-    const c = off.getContext('2d');
-
-    // Clear
-    c.clearRect(0, 0, off.width, off.height);
-
-    // Draw tiles back-to-front
-    this.seedRng(42);
-    for (let row = 0; row < map.grid.length; row++) {
-      for (let col = 0; col < map.grid[row].length; col++) {
-        const tile = map.grid[row][col];
-        this._drawCachedTile(c, col, row, tile, map);
-      }
-    }
-
-    // Decorations on blocked tiles
+    if (!map || this._decoMapRef === map) return;
+    this._decoMapRef = map;
+    this._decoMap = [];
     this.seedRng(99);
     for (let row = 0; row < map.grid.length; row++) {
+      this._decoMap[row] = [];
       for (let col = 0; col < map.grid[row].length; col++) {
-        if (map.grid[row][col] !== Game.Config.TILE.BLOCKED) continue;
-        const r = this.rng();
-        const center = this.gridToScreen(col + 0.5, row + 0.5);
-        if (r < 0.30) {
-          this._drawIsoTree(c, center.x, center.y);
-        } else if (r < 0.42) {
-          this._drawIsoRock(c, center.x, center.y);
+        if (map.grid[row][col] !== Game.Config.TILE.BLOCKED) {
+          this._decoMap[row][col] = 0;
+          this.rng(); // consume RNG to keep determinism
+          continue;
         }
+        const r = this.rng();
+        if (r < 0.30) this._decoMap[row][col] = 1; // tree
+        else if (r < 0.42) this._decoMap[row][col] = 2; // rock
+        else this._decoMap[row][col] = 0;
+      }
+    }
+  },
+
+  // Get visible tile range for current camera
+  _getVisibleRange() {
+    const map = Game.Map.current;
+    if (!map) return null;
+    const cols = map.grid[0].length;
+    const rows = map.grid.length;
+    // Sample corners of viewport to find tile range
+    const margin = 3; // extra tiles for safety
+    const corners = [
+      this.screenToGrid(0, 0),
+      this.screenToGrid(this.canvas.width, 0),
+      this.screenToGrid(0, this.canvas.height),
+      this.screenToGrid(this.canvas.width, this.canvas.height),
+    ];
+    let minCol = Infinity, maxCol = -Infinity;
+    let minRow = Infinity, maxRow = -Infinity;
+    for (const c of corners) {
+      minCol = Math.min(minCol, c.col);
+      maxCol = Math.max(maxCol, c.col);
+      minRow = Math.min(minRow, c.row);
+      maxRow = Math.max(maxRow, c.row);
+    }
+    return {
+      c0: Math.max(0, minCol - margin),
+      c1: Math.min(cols - 1, maxCol + margin),
+      r0: Math.max(0, minRow - margin),
+      r1: Math.min(rows - 1, maxRow + margin),
+    };
+  },
+
+  _drawVisibleMap(ctx) {
+    const map = Game.Map.current;
+    if (!map) return;
+    this._ensureDecoMap();
+    const range = this._getVisibleRange();
+    if (!range) return;
+
+    // Draw tiles (back-to-front within visible range)
+    for (let row = range.r0; row <= range.r1; row++) {
+      for (let col = range.c0; col <= range.c1; col++) {
+        // Use deterministic seed per tile for grass variation
+        this.seedRng(row * 1000 + col + 42);
+        const tile = map.grid[row][col];
+        this._drawCachedTile(ctx, col, row, tile, map);
       }
     }
 
-    this.mapCache = off;
+    // Decorations (second pass for draw order)
+    for (let row = range.r0; row <= range.r1; row++) {
+      for (let col = range.c0; col <= range.c1; col++) {
+        const deco = this._decoMap[row] && this._decoMap[row][col];
+        if (!deco) continue;
+        const center = this.gridToScreen(col + 0.5, row + 0.5);
+        this.seedRng(row * 1000 + col + 200); // deterministic per tile
+        if (deco === 1) this._drawIsoTree(ctx, center.x, center.y);
+        else if (deco === 2) this._drawIsoRock(ctx, center.x, center.y);
+      }
+    }
   },
 
   _drawCachedTile(c, col, row, tile, map) {
@@ -351,12 +437,8 @@ Game.Renderer = {
     ctx.fillStyle = '#1a2a10';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Map (cached)
-    if (!this.mapCache || this.lastMapRef !== Game.Map.current) {
-      this.buildMapCache();
-      this.lastMapRef = Game.Map.current;
-    }
-    ctx.drawImage(this.mapCache, 0, 0);
+    // Draw visible map tiles
+    this._drawVisibleMap(ctx);
 
     // Dynamic overlays
     this._drawOverlays(ctx, state);
@@ -424,19 +506,22 @@ Game.Renderer = {
       ctx.stroke();
     }
 
-    // Entry/exit pulse
+    // Entry/exit pulse (only visible tiles)
     const pulse = 0.06 + Math.sin(this.time * 2.5) * 0.04;
-    for (let row = 0; row < map.grid.length; row++) {
-      for (let col = 0; col < map.grid[row].length; col++) {
-        const t = map.grid[row][col];
-        if (t === Game.Config.TILE.ENTRY) {
-          this._tileDiamond(ctx, col, row);
-          ctx.fillStyle = `rgba(255,80,80,${pulse})`;
-          ctx.fill();
-        } else if (t === Game.Config.TILE.EXIT) {
-          this._tileDiamond(ctx, col, row);
-          ctx.fillStyle = `rgba(80,80,255,${pulse})`;
-          ctx.fill();
+    const range = this._getVisibleRange();
+    if (range) {
+      for (let row = range.r0; row <= range.r1; row++) {
+        for (let col = range.c0; col <= range.c1; col++) {
+          const t = map.grid[row][col];
+          if (t === Game.Config.TILE.ENTRY) {
+            this._tileDiamond(ctx, col, row);
+            ctx.fillStyle = `rgba(255,80,80,${pulse})`;
+            ctx.fill();
+          } else if (t === Game.Config.TILE.EXIT) {
+            this._tileDiamond(ctx, col, row);
+            ctx.fillStyle = `rgba(80,80,255,${pulse})`;
+            ctx.fill();
+          }
         }
       }
     }
