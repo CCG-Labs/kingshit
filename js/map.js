@@ -41,12 +41,6 @@ Game.Map = {
     return this.current.grid[row][col];
   },
 
-  // Can enemies walk on this tile?
-  isWalkable(col, row) {
-    const t = this.getTile(col, row);
-    return t === Game.Config.TILE.BUILDABLE || t === Game.Config.TILE.ENTRY;
-  },
-
   // Can the player build here?
   isBuildable(col, row) {
     return this.getTile(col, row) === Game.Config.TILE.BUILDABLE;
@@ -82,17 +76,23 @@ Game.Map = {
     return true;
   },
 
-  // Can castle be placed here?
   canPlaceCastle(col, row) {
-    if (!this.isBuildable(col, row)) return false;
-    // Must be reachable from at least one entry
-    // Quick test: just check it's a valid ground tile
-    return true;
+    return this.isBuildable(col, row);
   },
 
   // Recompute flow field (call after tower changes)
+  _cachedMaxDist: 1,
   computeFlowField(towers) {
     this.flowField = this._computeFlowFieldInternal(towers);
+    // Cache max distance so getMaxDist() is O(1)
+    let max = 0;
+    if (this.flowField) {
+      for (const entry of this.entries) {
+        const f = this.flowField[entry.row] && this.flowField[entry.row][entry.col];
+        if (f) max = Math.max(max, f.dist);
+      }
+    }
+    this._cachedMaxDist = max || 1;
   },
 
   _computeFlowFieldInternal(towers) {
@@ -143,14 +143,7 @@ Game.Map = {
     return field;
   },
 
-  // Get max distance from any entry to castle (for progress calculation)
   getMaxDist() {
-    if (!this.flowField) return 1;
-    let max = 0;
-    for (const entry of this.entries) {
-      const f = this.flowField[entry.row] && this.flowField[entry.row][entry.col];
-      if (f) max = Math.max(max, f.dist);
-    }
-    return max || 1;
+    return this._cachedMaxDist;
   },
 };

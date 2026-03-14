@@ -208,7 +208,7 @@ Game.Main = {
 
     // Button shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    this._roundRect(ctx, btnX + 2, btnY + 2, btnW, btnH, 8);
+    Game.UI._roundRect(ctx, btnX + 2, btnY + 2, btnW, btnH, 8);
     ctx.fill();
 
     // Button background
@@ -216,13 +216,13 @@ Game.Main = {
     btnBg.addColorStop(0, hovered ? '#3A6B24' : '#2E5A1B');
     btnBg.addColorStop(1, hovered ? '#2E5A1B' : '#1E4A0E');
     ctx.fillStyle = btnBg;
-    this._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+    Game.UI._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
     ctx.fill();
 
     // Button border
     ctx.strokeStyle = hovered ? '#FFD700' : 'rgba(100,180,60,0.5)';
     ctx.lineWidth = hovered ? 2 : 1;
-    this._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+    Game.UI._roundRect(ctx, btnX, btnY, btnW, btnH, 8);
     ctx.stroke();
 
     // Hover top highlight
@@ -231,7 +231,7 @@ Game.Main = {
       hg.addColorStop(0, 'rgba(255,255,255,0.1)');
       hg.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = hg;
-      this._roundRect(ctx, btnX, btnY, btnW, 8, 8);
+      Game.UI._roundRect(ctx, btnX, btnY, btnW, 8, 8);
       ctx.fill();
     }
 
@@ -256,20 +256,6 @@ Game.Main = {
     ctx.fillText('+/- for game speed', canvas.width / 2, helpY + 28);
 
     ctx.textAlign = 'left';
-  },
-
-  _roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
   },
 
   updateGame(dt) {
@@ -383,9 +369,7 @@ Game.Main = {
               speed: 80, life: 0.6, size: 3, glow: true,
             });
           } else {
-            // Invalid position - reset
-            Game.Map.castleCol = -1;
-            Game.Map.castleRow = -1;
+            Game.Map.placeCastle(-1, -1);
           }
         }
       }

@@ -588,6 +588,7 @@ Game.UI = {
         const idx = state.towers.indexOf(state.selectedTower);
         if (idx >= 0) state.towers.splice(idx, 1);
         state.selectedTower = null;
+        Game.Map.computeFlowField(state.towers);
         return true;
       }
     }

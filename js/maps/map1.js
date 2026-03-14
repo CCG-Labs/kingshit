@@ -96,7 +96,6 @@ Game.Maps = Game.Maps || {};
     description: 'An open battlefield. Place your castle and defend it.',
     difficulty: 1,
     grid: grid,
-    paths: [], // no predefined paths - uses flow field
     waves: generateWaves(),
   };
 

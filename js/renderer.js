@@ -454,7 +454,9 @@ Game.Renderer = {
     }
 
     // Placement preview
-    if (state.placingTower && state.gameState === 'playing') this._drawPlacementPreview(ctx, state);
+    if (state.placingTower && state.gameState === 'playing') {
+      this._drawPlacementPreview(ctx, state);
+    }
     if (state.selectedTower) {
       const sp = this.worldToScreen(state.selectedTower.x, state.selectedTower.y);
       this._drawRangeEllipse(ctx, sp.x, sp.y - 6, state.selectedTower.range, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.2)');
@@ -516,24 +518,12 @@ Game.Renderer = {
       ctx.stroke();
     }
 
-    // Entry/exit pulse (only visible tiles)
+    // Entry pulse (use pre-found entries instead of scanning tiles)
     const pulse = 0.06 + Math.sin(this.time * 2.5) * 0.04;
-    const range = this._getVisibleRange();
-    if (range) {
-      for (let row = range.r0; row <= range.r1; row++) {
-        for (let col = range.c0; col <= range.c1; col++) {
-          const t = map.grid[row][col];
-          if (t === Game.Config.TILE.ENTRY) {
-            this._tileDiamond(ctx, col, row);
-            ctx.fillStyle = `rgba(255,80,80,${pulse})`;
-            ctx.fill();
-          } else if (t === Game.Config.TILE.EXIT) {
-            this._tileDiamond(ctx, col, row);
-            ctx.fillStyle = `rgba(80,80,255,${pulse})`;
-            ctx.fill();
-          }
-        }
-      }
+    for (const entry of Game.Map.entries) {
+      this._tileDiamond(ctx, entry.col, entry.row);
+      ctx.fillStyle = `rgba(255,80,80,${pulse})`;
+      ctx.fill();
     }
   },
 
@@ -543,7 +533,7 @@ Game.Renderer = {
     const grid = Game.Input.getGridPos();
     const col = grid.col, row = grid.row;
     const def = Game.Config.TOWERS[state.placingTower];
-    const ok = Game.Map.canPlace(col, row, state.towers);
+    const ok = Game.Map.canPlaceBasic(col, row, state.towers);
 
     this._tileDiamond(ctx, col, row);
     ctx.fillStyle = ok ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)';

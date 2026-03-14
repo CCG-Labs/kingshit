@@ -9,7 +9,6 @@ Game.Enemy = class Enemy {
     this.type = type;
     this.maxHp = Math.round(def.hp * scaling);
     this.hp = this.maxHp;
-    this.speed = def.speed;
     this.baseSpeed = def.speed;
     this.armor = def.armor;
     this.gold = Math.round(def.gold * goldScaling);
