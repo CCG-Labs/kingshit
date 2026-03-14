@@ -320,9 +320,9 @@ Game.Renderer = {
     const hue = buildable ? 118 : 125;
     const sat = buildable ? 52 : 42;
     const lit = buildable ? 30 : 25;
-    const n = this._fbm(col * 0.18, row * 0.18);
-    const hv = n * 14;
-    const lv = n * 8;
+    const noiseVal = this._fbm(col * 0.18, row * 0.18);
+    const hv = noiseVal * 14;
+    const lv = noiseVal * 8;
 
     this._tileDiamond(c, col, row);
     c.fillStyle = `hsl(${hue + hv}, ${sat}%, ${lit + lv}%)`;
