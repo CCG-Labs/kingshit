@@ -64,6 +64,42 @@ Game.Maps = Game.Maps || {};
     }
   }
 
+  // Cellular automata smoothing to create organic corridors
+  function countBlockedNeighbors(grid, r, c) {
+    let count = 0;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+          if (grid[nr][nc] === T.BLOCKED) count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  // Run cellular automata for 1 iteration with threshold 4
+  for (let iter = 0; iter < 1; iter++) {
+    const newGrid = [];
+    for (let r = 0; r < ROWS; r++) {
+      newGrid[r] = [...grid[r]];
+    }
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid[r][c] === T.BUILDABLE) {
+          const blocked = countBlockedNeighbors(grid, r, c);
+          if (blocked >= 4) {
+            newGrid[r][c] = T.BLOCKED;
+          }
+        }
+      }
+    }
+    for (let r = 0; r < ROWS; r++) {
+      grid[r] = newGrid[r];
+    }
+  }
+
   // Clear areas around entry points (ensure they're walkable)
   function clearArea(cx, cy, radius) {
     for (let r = cy - radius; r <= cy + radius; r++) {
