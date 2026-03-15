@@ -129,7 +129,7 @@ Game.Main = {
       this.updateMenu(dt);
       this.drawMenu(dt);
     } else {
-      this.updateGame(dt);
+      this.updateGame(dt, now);
       this.drawGame(dt);
     }
 
@@ -326,7 +326,7 @@ Game.Main = {
     ctx.textAlign = 'left';
   },
 
-  updateGame(dt) {
+  updateGame(dt, now) {
     const state = Game.state;
     if (!state) return;
 
@@ -400,6 +400,17 @@ Game.Main = {
 
     for (const proj of state.projectiles) {
       if (!proj.dead) proj.update(gameDt);
+    }
+
+    // Castle archers fire
+    if (Game.Castle && Game.state.kingdom.castle) {
+      Game.Castle.fireArchers(now);
+    }
+
+    // Check if castle is destroyed
+    if (Game.Castle && Game.Castle.isDestroyed()) {
+      this.menuState = 'playing';
+      Game.state.gameState = 'gameover';
     }
 
     // Spawn trees periodically

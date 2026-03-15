@@ -120,4 +120,74 @@ Game.Castle = {
   getArcherCount() {
     return Game.state.kingdom.population.residents.length;
   },
+
+  /**
+   * Fire archer volley at enemies
+   * @param {number} currentTime - current game time in ms
+   */
+  fireArchers(currentTime) {
+    if (Game.state.kingdom.castle.lastArcherFireTime === 0) {
+      Game.state.kingdom.castle.lastArcherFireTime = currentTime;
+      return;
+    }
+
+    const timeSinceLastFire = currentTime - Game.state.kingdom.castle.lastArcherFireTime;
+    if (timeSinceLastFire < Game.Config.ARCHER_FIRE_RATE) {
+      return;
+    }
+
+    const archerCount = this.getArcherCount();
+    const damage = this.getArcherDamage();
+    const range = this.getArcherRange();
+
+    if (!Game.state.enemies || Game.state.enemies.length === 0) {
+      Game.state.kingdom.castle.lastArcherFireTime = currentTime;
+      return;
+    }
+
+    for (let i = 0; i < archerCount; i++) {
+      const enemy = this._findNearestEnemy(range);
+      if (enemy) {
+        if (Game.Projectile) {
+          Game.Projectile.create({
+            x: (Game.Config.GRID_COLS / 2) * Game.Config.TILE_SIZE,
+            y: (Game.Config.GRID_ROWS / 2) * Game.Config.TILE_SIZE,
+            targetX: enemy.x,
+            targetY: enemy.y,
+            damage: damage,
+            speed: 400,
+            sourceType: 'castle',
+          });
+        }
+      }
+    }
+
+    Game.state.kingdom.castle.lastArcherFireTime = currentTime;
+  },
+
+  /**
+   * Find nearest enemy within range
+   * @private
+   */
+  _findNearestEnemy(range) {
+    if (!Game.state.enemies || Game.state.enemies.length === 0) {
+      return null;
+    }
+
+    const castleX = (Game.Config.GRID_COLS / 2) * Game.Config.TILE_SIZE;
+    const castleY = (Game.Config.GRID_ROWS / 2) * Game.Config.TILE_SIZE;
+
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const enemy of Game.state.enemies) {
+      const dist = Math.hypot(enemy.x - castleX, enemy.y - castleY);
+      if (dist < range && dist < nearestDist) {
+        nearest = enemy;
+        nearestDist = dist;
+      }
+    }
+
+    return nearest;
+  },
 };
