@@ -148,17 +148,22 @@ Game.Castle = {
     for (let i = 0; i < archerCount; i++) {
       const enemy = this._findNearestEnemy(range);
       if (enemy) {
-        if (Game.Projectile) {
-          Game.Projectile.create({
-            x: (Game.Config.GRID_COLS / 2) * Game.Config.TILE_SIZE,
-            y: (Game.Config.GRID_ROWS / 2) * Game.Config.TILE_SIZE,
-            targetX: enemy.x,
-            targetY: enemy.y,
-            damage: damage,
-            speed: 400,
-            sourceType: 'castle',
-          });
-        }
+        // Create a mock tower object for archer projectiles
+        const archerTower = {
+          x: (Game.Config.GRID_COLS / 2) * Game.Config.TILE_SIZE,
+          y: (Game.Config.GRID_ROWS / 2) * Game.Config.TILE_SIZE,
+          projectileSpeed: 400,
+          damage: damage,
+          special: null,
+          projectileColor: '#FDB750',
+          type: 'archer',
+          splashRadius: 0,
+          slowAmount: 0,
+          slowDuration: 0,
+          canHitFlying: true,
+        };
+        const proj = new Game.Projectile(archerTower, enemy);
+        Game.state.projectiles.push(proj);
       }
     }
 
