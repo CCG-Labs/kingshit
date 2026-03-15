@@ -108,7 +108,8 @@ Game.Input = {
     const w = this.canvas.width;
     const h = this.canvas.height;
 
-    let dx = 0, dy = 0;
+    let dx = 0,
+      dy = 0;
     if (mx < m) dx = -speed * (1 - mx / m);
     else if (mx > w - m) dx = speed * (1 - (w - mx) / m);
     if (my < m) dy = -speed * (1 - my / m);
@@ -133,5 +134,33 @@ Game.Input = {
 
   getGridPos() {
     return Game.Renderer.screenToGrid(this.mouse.x, this.mouse.y);
+  },
+
+  // Handle HUD click events
+  handleHUDClick() {
+    if (!this.clicked || !this.clickPos) return false;
+
+    const clickX = this.clickPos.x;
+    const clickY = this.clickPos.y;
+
+    // Handle HUD clicks
+    if (clickY < 30) {
+      // Click in HUD area
+      if (clickX > 110 && clickX < 210) {
+        // Population area clicked
+        if (Game.UI.populationPanelOpen) {
+          Game.UI.closePopulationPanel();
+        } else {
+          Game.UI.showPopulationPanel();
+        }
+        return true;
+      }
+    } else if (Game.UI && Game.UI.populationPanelOpen) {
+      // Click outside panel closes it
+      Game.UI.closePopulationPanel();
+      return true;
+    }
+
+    return false;
   },
 };

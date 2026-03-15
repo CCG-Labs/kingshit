@@ -626,6 +626,11 @@ Game.Main = {
       const x = input.clickPos.x;
       const y = input.clickPos.y;
 
+      // Handle HUD clicks first
+      if (Game.Input.handleHUDClick()) {
+        return;
+      }
+
       if (Game.UI.handleClick(state, x, y, this.canvas)) {
         return;
       }

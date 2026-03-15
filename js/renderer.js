@@ -32,7 +32,7 @@ Game.Renderer = {
     this.isoTileW = Game.Config.ISO_TILE_W;
     this.isoTileH = Game.Config.ISO_TILE_H;
     // World origin: the top corner of tile (0,0) in world iso space (before camera)
-    this.isoWorldOriginX = Game.Config.GRID_ROWS * this.isoTileW / 2 + 12;
+    this.isoWorldOriginX = (Game.Config.GRID_ROWS * this.isoTileW) / 2 + 12;
     this.isoWorldOriginY = 40;
     this.camX = 0;
     this.camY = 0;
@@ -64,8 +64,8 @@ Game.Renderer = {
   // Grid/world to absolute iso coords (before camera)
   _gridToIso(col, row) {
     return {
-      x: this.isoWorldOriginX + (col - row) * this.isoTileW / 2,
-      y: this.isoWorldOriginY + (col + row) * this.isoTileH / 2,
+      x: this.isoWorldOriginX + ((col - row) * this.isoTileW) / 2,
+      y: this.isoWorldOriginY + ((col + row) * this.isoTileH) / 2,
     };
   },
 
@@ -123,30 +123,41 @@ Game.Renderer = {
 
     // Right side
     ctx.beginPath();
-    ctx.moveTo(r.x, r.y - h); ctx.lineTo(b.x, b.y - h);
-    ctx.lineTo(b.x, b.y); ctx.lineTo(r.x, r.y);
+    ctx.moveTo(r.x, r.y - h);
+    ctx.lineTo(b.x, b.y - h);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(r.x, r.y);
     ctx.closePath();
-    ctx.fillStyle = rightFill; ctx.fill();
+    ctx.fillStyle = rightFill;
+    ctx.fill();
 
     // Left side
     ctx.beginPath();
-    ctx.moveTo(l.x, l.y - h); ctx.lineTo(b.x, b.y - h);
-    ctx.lineTo(b.x, b.y); ctx.lineTo(l.x, l.y);
+    ctx.moveTo(l.x, l.y - h);
+    ctx.lineTo(b.x, b.y - h);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(l.x, l.y);
     ctx.closePath();
-    ctx.fillStyle = leftFill; ctx.fill();
+    ctx.fillStyle = leftFill;
+    ctx.fill();
 
     // Top face
     ctx.beginPath();
-    ctx.moveTo(t.x, t.y - h); ctx.lineTo(r.x, r.y - h);
-    ctx.lineTo(b.x, b.y - h); ctx.lineTo(l.x, l.y - h);
+    ctx.moveTo(t.x, t.y - h);
+    ctx.lineTo(r.x, r.y - h);
+    ctx.lineTo(b.x, b.y - h);
+    ctx.lineTo(l.x, l.y - h);
     ctx.closePath();
-    ctx.fillStyle = topFill; ctx.fill();
+    ctx.fillStyle = topFill;
+    ctx.fill();
   },
 
   // ── Seeded RNG ───────────────────────────────────────────
 
   _seed: 42,
-  seedRng(s) { this._seed = s; },
+  seedRng(s) {
+    this._seed = s;
+  },
   rng() {
     this._seed = (this._seed * 16807) % 2147483647;
     return (this._seed - 1) / 2147483646;
@@ -170,22 +181,37 @@ Game.Renderer = {
 
   _noise2(x, y) {
     // Standard Perlin noise, 2D
-    const fade = t => t*t*t*(t*(t*6-15)+10);
-    const lerp = (a,b,t) => a+t*(b-a);
-    const grad = (h, x, y) => { const u=h<8?x:y, v=h<4?y:h===12||h===14?x:0; return ((h&1)?-u:u)+((h&2)?-v:v); };
+    const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+    const lerp = (a, b, t) => a + t * (b - a);
+    const grad = (h, x, y) => {
+      const u = h < 8 ? x : y,
+        v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
+      return (h & 1 ? -u : u) + (h & 2 ? -v : v);
+    };
     const p = this._noisePerm;
-    const X = Math.floor(x)&255, Y = Math.floor(y)&255;
-    x -= Math.floor(x); y -= Math.floor(y);
-    const u = fade(x), v = fade(y);
-    const A=p[X]+Y, B=p[X+1]+Y;
-    return lerp(lerp(grad(p[A],x,y), grad(p[B],x-1,y),u),
-                lerp(grad(p[A+1],x,y-1), grad(p[B+1],x-1,y-1),u), v);
+    const X = Math.floor(x) & 255,
+      Y = Math.floor(y) & 255;
+    x -= Math.floor(x);
+    y -= Math.floor(y);
+    const u = fade(x),
+      v = fade(y);
+    const A = p[X] + Y,
+      B = p[X + 1] + Y;
+    return lerp(
+      lerp(grad(p[A], x, y), grad(p[B], x - 1, y), u),
+      lerp(grad(p[A + 1], x, y - 1), grad(p[B + 1], x - 1, y - 1), u),
+      v
+    );
   },
 
   _fbm(x, y) {
     // 4-octave fractal noise, returns roughly -1..1
-    return this._noise2(x,y)*0.5 + this._noise2(x*2,y*2)*0.25
-         + this._noise2(x*4,y*4)*0.125 + this._noise2(x*8,y*8)*0.0625;
+    return (
+      this._noise2(x, y) * 0.5 +
+      this._noise2(x * 2, y * 2) * 0.25 +
+      this._noise2(x * 4, y * 4) * 0.125 +
+      this._noise2(x * 8, y * 8) * 0.0625
+    );
   },
 
   // ── Map rendering (viewport-culled, no full cache) ──────
@@ -203,7 +229,8 @@ Game.Renderer = {
 
   _buildScatterDecos(map) {
     this._scatterDecos = [];
-    const TW = this.isoTileW, TH = this.isoTileH;
+    const TW = this.isoTileW,
+      TH = this.isoTileH;
 
     for (let row = 0; row < map.grid.length; row++) {
       for (let col = 0; col < map.grid[row].length; col++) {
@@ -245,8 +272,10 @@ Game.Renderer = {
       this.screenToGrid(0, this.canvas.height),
       this.screenToGrid(this.canvas.width, this.canvas.height),
     ];
-    let minCol = Infinity, maxCol = -Infinity;
-    let minRow = Infinity, maxRow = -Infinity;
+    let minCol = Infinity,
+      maxCol = -Infinity;
+    let minRow = Infinity,
+      maxRow = -Infinity;
     for (const c of corners) {
       minCol = Math.min(minCol, c.col);
       maxCol = Math.max(maxCol, c.col);
@@ -291,7 +320,7 @@ Game.Renderer = {
         if (sx < -80 || sx > ctx.canvas.width + 80) continue;
         if (sy < -80 || sy > ctx.canvas.height + 80) continue;
         if (d.type === 1) this._drawIsoTree(ctx, sx, sy, d.scale);
-        else               this._drawIsoRock(ctx, sx, sy, d.scale);
+        else this._drawIsoRock(ctx, sx, sy, d.scale);
       }
     }
   },
@@ -371,8 +400,11 @@ Game.Renderer = {
       // Arrow
       c.fillStyle = 'rgba(255,80,80,0.5)';
       c.beginPath();
-      const cx = center.x, cy = center.y - 3;
-      c.moveTo(cx + 8, cy); c.lineTo(cx - 4, cy - 5); c.lineTo(cx - 4, cy + 5);
+      const cx = center.x,
+        cy = center.y - 3;
+      c.moveTo(cx + 8, cy);
+      c.lineTo(cx - 4, cy - 5);
+      c.lineTo(cx - 4, cy + 5);
       c.closePath();
       c.fill();
     } else if (tile === T.EXIT) {
@@ -411,7 +443,9 @@ Game.Renderer = {
     ];
     for (const [a, mid, b2] of corners) {
       c.beginPath();
-      c.moveTo(a.x, a.y); c.lineTo(mid.x, mid.y); c.lineTo(b2.x, b2.y);
+      c.moveTo(a.x, a.y);
+      c.lineTo(mid.x, mid.y);
+      c.lineTo(b2.x, b2.y);
       c.stroke();
     }
   },
@@ -421,7 +455,8 @@ Game.Renderer = {
   _drawTerrainSplats(ctx) {
     const map = Game.Map.current;
     if (!map || !map.clusters) return;
-    const TW = this.isoTileW, TH = this.isoTileH;
+    const TW = this.isoTileW,
+      TH = this.isoTileH;
     const T = Game.Config.TERRAIN;
 
     for (const cl of map.clusters) {
@@ -445,7 +480,10 @@ Game.Renderer = {
       }
 
       // Draw 2 overlapping ellipses (core + halo) for soft edge
-      for (const [scale, alpha] of [[0.55, 1.0], [1.0, 0.7]]) {
+      for (const [scale, alpha] of [
+        [0.55, 1.0],
+        [1.0, 0.7],
+      ]) {
         ctx.save();
         ctx.translate(center.x, center.y);
         ctx.scale(1, ry / rx); // squish to iso aspect
@@ -565,7 +603,62 @@ Game.Renderer = {
     }
     if (state.selectedTower) {
       const sp = this.worldToScreen(state.selectedTower.x, state.selectedTower.y);
-      this._drawRangeEllipse(ctx, sp.x, sp.y - 6, state.selectedTower.range, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.2)');
+      this._drawRangeEllipse(
+        ctx,
+        sp.x,
+        sp.y - 6,
+        state.selectedTower.range,
+        'rgba(255,255,255,0.08)',
+        'rgba(255,255,255,0.2)'
+      );
+    }
+
+    // Draw trees
+    if (Game.state.kingdom && Game.state.kingdom.trees) {
+      for (const tree of Game.state.kingdom.trees) {
+        if (tree.harvested) continue;
+        const screenPos = this.worldToScreen(
+          tree.col * Game.Config.TILE_SIZE,
+          tree.row * Game.Config.TILE_SIZE
+        );
+        // Draw tree sprite (brown triangle)
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath();
+        ctx.moveTo(screenPos.x, screenPos.y - 8);
+        ctx.lineTo(screenPos.x - 6, screenPos.y + 4);
+        ctx.lineTo(screenPos.x + 6, screenPos.y + 4);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Draw residents
+    if (Game.state.kingdom && Game.state.kingdom.population.residents) {
+      for (const resident of Game.state.kingdom.population.residents) {
+        if (resident.state === 'dead') continue;
+        const screenPos = this.worldToScreen(
+          resident.gridPos.col * Game.Config.TILE_SIZE,
+          resident.gridPos.row * Game.Config.TILE_SIZE
+        );
+        // Draw resident sprite (green circle)
+        ctx.fillStyle = '#00FF00';
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        // Draw state indicator
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '10px monospace';
+        const stateChar =
+          {
+            idle: '◯',
+            seeking: '?',
+            moving: '→',
+            working: '✕',
+            returning: '←',
+            fleeing: '!',
+          }[resident.state] || '?';
+        ctx.fillText(stateChar, screenPos.x - 3, screenPos.y + 3);
+      }
     }
 
     // Collect & depth-sort drawable entities
@@ -602,6 +695,16 @@ Game.Renderer = {
     // Particles
     Game.Particles.draw(ctx);
 
+    // Draw population panel if open
+    if (Game.UI && Game.UI.drawPopulationPanel) {
+      Game.UI.drawPopulationPanel(this.ctx, this.canvas.width, this.canvas.height);
+    }
+
+    // Draw HUD (top bar)
+    if (Game.UI && Game.UI.drawHUD) {
+      Game.UI.drawHUD(this.ctx, this.canvas.width, this.canvas.height);
+    }
+
     ctx.restore();
   },
 
@@ -613,9 +716,13 @@ Game.Renderer = {
 
     // Hover highlight on buildable
     const grid = Game.Input.getGridPos();
-    if (grid.col >= 0 && grid.col < Game.Config.GRID_COLS &&
-        grid.row >= 0 && grid.row < Game.Config.GRID_ROWS &&
-        Game.Map.isBuildable(grid.col, grid.row)) {
+    if (
+      grid.col >= 0 &&
+      grid.col < Game.Config.GRID_COLS &&
+      grid.row >= 0 &&
+      grid.row < Game.Config.GRID_ROWS &&
+      Game.Map.isBuildable(grid.col, grid.row)
+    ) {
       this._tileDiamond(ctx, grid.col, grid.row);
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fill();
@@ -637,7 +744,8 @@ Game.Renderer = {
 
   _drawPlacementPreview(ctx, state) {
     const grid = Game.Input.getGridPos();
-    const col = grid.col, row = grid.row;
+    const col = grid.col,
+      row = grid.row;
     const def = Game.Config.TOWERS[state.placingTower];
     const ok = Game.Map.canPlaceBasic(col, row, state.towers);
 
@@ -662,8 +770,8 @@ Game.Renderer = {
 
   _drawRangeEllipse(ctx, sx, sy, range, fill, stroke) {
     const ts = Game.Config.TILE_SIZE;
-    const rx = range * Math.SQRT2 * this.isoTileW / (2 * ts);
-    const ry = range * Math.SQRT2 * this.isoTileH / (2 * ts);
+    const rx = (range * Math.SQRT2 * this.isoTileW) / (2 * ts);
+    const ry = (range * Math.SQRT2 * this.isoTileH) / (2 * ts);
     ctx.beginPath();
     ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = fill;
@@ -681,22 +789,28 @@ Game.Renderer = {
     const col = Game.Map.castleCol;
     const row = Game.Map.castleRow;
     const sp = this.gridToScreen(col + 0.5, row + 0.5);
-    const x = sp.x, y = sp.y;
+    const x = sp.x,
+      y = sp.y;
 
     // Stone foundation
     this._drawBlock(ctx, col, row, 8, '#807060', '#605040', '#504030');
 
     // Castle keep - front wall
     const wg = ctx.createLinearGradient(x - 14, y, x + 14, y);
-    wg.addColorStop(0, '#887766'); wg.addColorStop(0.5, '#998877'); wg.addColorStop(1, '#776655');
+    wg.addColorStop(0, '#887766');
+    wg.addColorStop(0.5, '#998877');
+    wg.addColorStop(1, '#776655');
     ctx.fillStyle = wg;
     ctx.fillRect(x - 14, y - 42, 28, 34);
     // Side wall
     ctx.fillStyle = '#665544';
     ctx.beginPath();
-    ctx.moveTo(x + 14, y - 42); ctx.lineTo(x + 20, y - 45);
-    ctx.lineTo(x + 20, y - 11); ctx.lineTo(x + 14, y - 8);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 14, y - 42);
+    ctx.lineTo(x + 20, y - 45);
+    ctx.lineTo(x + 20, y - 11);
+    ctx.lineTo(x + 14, y - 8);
+    ctx.closePath();
+    ctx.fill();
     // Battlements
     ctx.fillStyle = '#887766';
     for (let i = 0; i < 5; i++) {
@@ -705,17 +819,24 @@ Game.Renderer = {
     // Gate
     ctx.fillStyle = '#3A2A1A';
     ctx.beginPath();
-    ctx.moveTo(x - 5, y - 8); ctx.lineTo(x - 5, y - 20);
+    ctx.moveTo(x - 5, y - 8);
+    ctx.lineTo(x - 5, y - 20);
     ctx.arc(x, y - 20, 5, Math.PI, 0);
     ctx.lineTo(x + 5, y - 8);
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
+    ctx.fill();
     // Gate portcullis
-    ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x - 4, y - 8); ctx.lineTo(x - 4, y - 19);
-    ctx.moveTo(x, y - 8); ctx.lineTo(x, y - 24);
-    ctx.moveTo(x + 4, y - 8); ctx.lineTo(x + 4, y - 19);
-    ctx.moveTo(x - 4, y - 14); ctx.lineTo(x + 4, y - 14);
+    ctx.moveTo(x - 4, y - 8);
+    ctx.lineTo(x - 4, y - 19);
+    ctx.moveTo(x, y - 8);
+    ctx.lineTo(x, y - 24);
+    ctx.moveTo(x + 4, y - 8);
+    ctx.lineTo(x + 4, y - 19);
+    ctx.moveTo(x - 4, y - 14);
+    ctx.lineTo(x + 4, y - 14);
     ctx.stroke();
     // Arrow slits
     ctx.fillStyle = '#222';
@@ -728,20 +849,31 @@ Game.Renderer = {
     // Turret tops (conical)
     ctx.fillStyle = '#4444AA';
     ctx.beginPath();
-    ctx.moveTo(x - 12, y - 58); ctx.lineTo(x - 17, y - 48); ctx.lineTo(x - 7, y - 48);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x - 12, y - 58);
+    ctx.lineTo(x - 17, y - 48);
+    ctx.lineTo(x - 7, y - 48);
+    ctx.closePath();
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 12, y - 58); ctx.lineTo(x + 7, y - 48); ctx.lineTo(x + 17, y - 48);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 12, y - 58);
+    ctx.lineTo(x + 7, y - 48);
+    ctx.lineTo(x + 17, y - 48);
+    ctx.closePath();
+    ctx.fill();
     // Banner
     ctx.fillStyle = '#CC2222';
     ctx.beginPath();
-    ctx.moveTo(x, y - 52); ctx.lineTo(x + 10, y - 48);
-    ctx.lineTo(x, y - 44); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#555'; ctx.fillRect(x - 1, y - 56, 2, 14);
+    ctx.moveTo(x, y - 52);
+    ctx.lineTo(x + 10, y - 48);
+    ctx.lineTo(x, y - 44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#555';
+    ctx.fillRect(x - 1, y - 56, 2, 14);
     // Glow at base
     ctx.save();
-    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 8 + Math.sin(this.time * 2) * 3;
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 8 + Math.sin(this.time * 2) * 3;
     ctx.fillStyle = 'rgba(255,215,0,0.15)';
     ctx.beginPath();
     ctx.ellipse(x, y - 4, 18, 6, 0, 0, Math.PI * 2);
@@ -750,13 +882,15 @@ Game.Renderer = {
 
     // Castle health bar
     if (Game.state && Game.state.castleHp < Game.state.castleMaxHp) {
-      const bw = 36, bh = 4;
-      const bx = x - bw / 2, by = y - 66;
+      const bw = 36,
+        bh = 4;
+      const bx = x - bw / 2,
+        by = y - 66;
       const ratio = Game.state.castleHp / Game.state.castleMaxHp;
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
       // Gold-to-red gradient based on ratio
-      ctx.fillStyle = ratio > 0.6 ? '#FFD700' : (ratio > 0.3 ? '#FF8800' : '#FF3333');
+      ctx.fillStyle = ratio > 0.6 ? '#FFD700' : ratio > 0.3 ? '#FF8800' : '#FF3333';
       ctx.fillRect(bx, by, bw * ratio, bh);
     }
   },
@@ -765,7 +899,8 @@ Game.Renderer = {
 
   _drawCastlePlacementOverlay(ctx) {
     const grid = Game.Input.getGridPos();
-    const col = grid.col, row = grid.row;
+    const col = grid.col,
+      row = grid.row;
     const valid = Game.Map.canPlaceCastle(col, row);
 
     if (col >= 0 && col < Game.Config.GRID_COLS && row >= 0 && row < Game.Config.GRID_ROWS) {
@@ -804,9 +939,19 @@ Game.Renderer = {
     // Level stars (above the tower)
     if (tower.level > 1) {
       ctx.save();
-      ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 4;
-      ctx.fillStyle = '#FFD700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-      const starHeights = { arrow: 44, cannon: 34, frost: 48, lightning: 42, sniper: 50, flame: 36 };
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      const starHeights = {
+        arrow: 44,
+        cannon: 34,
+        frost: 48,
+        lightning: 42,
+        sniper: 50,
+        flame: 36,
+      };
       ctx.fillText('\u2605'.repeat(tower.level - 1), tx, ty - (starHeights[tower.type] || 30));
       ctx.restore();
     }
@@ -823,40 +968,60 @@ Game.Renderer = {
 
     // Tower health bar (shown when damaged)
     if (tower.hp < tower.maxHp) {
-      const bw = 28, bh = 3;
+      const bw = 28,
+        bh = 3;
       const bx = tx - bw / 2;
       const barHeights = { arrow: 50, cannon: 38, frost: 52, lightning: 48, sniper: 56, flame: 40 };
       const by = ty - (barHeights[tower.type] || 36) - 6;
       const ratio = tower.hp / tower.maxHp;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-      ctx.fillStyle = ratio > 0.6 ? '#4488FF' : (ratio > 0.3 ? '#FFAA44' : '#FF4444');
+      ctx.fillStyle = ratio > 0.6 ? '#4488FF' : ratio > 0.3 ? '#FFAA44' : '#FF4444';
       ctx.fillRect(bx, by, bw * ratio, bh);
     }
 
     // Flame cone
     if (tower.special === 'cone' && tower.target) {
-      ctx.save(); ctx.translate(tx, ty); ctx.rotate(tower.facing);
+      ctx.save();
+      ctx.translate(tx, ty);
+      ctx.rotate(tower.facing);
       const fg = ctx.createRadialGradient(0, 0, 0, 0, 0, tower.range * 0.5);
       fg.addColorStop(0, 'rgba(255,120,0,0.2)');
       fg.addColorStop(0.5, 'rgba(255,60,0,0.1)');
       fg.addColorStop(1, 'rgba(255,30,0,0)');
-      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
       ctx.arc(0, 0, tower.range * 0.5, -tower.coneAngle / 2, tower.coneAngle / 2);
-      ctx.closePath(); ctx.fillStyle = fg; ctx.fill();
+      ctx.closePath();
+      ctx.fillStyle = fg;
+      ctx.fill();
       ctx.restore();
     }
   },
 
   _drawTowerBody(ctx, x, y, type, def, facing, level) {
     switch (type) {
-      case 'arrow': this._tArrow(ctx, x, y, facing); break;
-      case 'cannon': this._tCannon(ctx, x, y, facing); break;
-      case 'frost': this._tFrost(ctx, x, y, facing); break;
-      case 'lightning': this._tLightning(ctx, x, y, facing); break;
-      case 'sniper': this._tSniper(ctx, x, y, facing); break;
-      case 'flame': this._tFlame(ctx, x, y, facing); break;
-      default: this._tArrow(ctx, x, y, facing); break;
+      case 'arrow':
+        this._tArrow(ctx, x, y, facing);
+        break;
+      case 'cannon':
+        this._tCannon(ctx, x, y, facing);
+        break;
+      case 'frost':
+        this._tFrost(ctx, x, y, facing);
+        break;
+      case 'lightning':
+        this._tLightning(ctx, x, y, facing);
+        break;
+      case 'sniper':
+        this._tSniper(ctx, x, y, facing);
+        break;
+      case 'flame':
+        this._tFlame(ctx, x, y, facing);
+        break;
+      default:
+        this._tArrow(ctx, x, y, facing);
+        break;
     }
   },
 
@@ -884,45 +1049,70 @@ Game.Renderer = {
     // Peaked roof
     ctx.fillStyle = '#654321';
     ctx.beginPath();
-    ctx.moveTo(x, y - 48); ctx.lineTo(x - 13, y - 36); ctx.lineTo(x + 13, y - 36);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#4A3018'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.moveTo(x, y - 48);
+    ctx.lineTo(x - 13, y - 36);
+    ctx.lineTo(x + 13, y - 36);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#4A3018';
+    ctx.lineWidth = 1;
+    ctx.stroke();
     // Roof shingles
-    ctx.strokeStyle = '#553315'; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(x - 10, y - 40); ctx.lineTo(x + 10, y - 40); ctx.stroke();
+    ctx.strokeStyle = '#553315';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y - 40);
+    ctx.lineTo(x + 10, y - 40);
+    ctx.stroke();
     // Archer figure
     ctx.fillStyle = '#D4A574'; // skin head
-    ctx.beginPath(); ctx.arc(x, y - 42, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 42, 2.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#2E5A1B'; // green tunic body
     ctx.fillRect(x - 2, y - 39, 4, 5);
     // Bow
-    ctx.strokeStyle = '#8B6914'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#8B6914';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(x + 5, y - 38, 5, -Math.PI * 0.6, Math.PI * 0.6);
     ctx.stroke();
     // Bowstring
-    ctx.strokeStyle = '#AAA'; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(x + 2, y - 42); ctx.lineTo(x + 2, y - 34); ctx.stroke();
+    ctx.strokeStyle = '#AAA';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - 42);
+    ctx.lineTo(x + 2, y - 34);
+    ctx.stroke();
   },
 
   // Cannon Tower: stone keep with battlements and ballista
   _tCannon(ctx, x, y, f) {
     // Stone wall - front face
     const wg = ctx.createLinearGradient(x - 10, y, x + 10, y);
-    wg.addColorStop(0, '#777'); wg.addColorStop(0.5, '#888'); wg.addColorStop(1, '#666');
+    wg.addColorStop(0, '#777');
+    wg.addColorStop(0.5, '#888');
+    wg.addColorStop(1, '#666');
     ctx.fillStyle = wg;
     ctx.fillRect(x - 10, y - 26, 20, 26);
     // Side face (darker)
     ctx.fillStyle = '#555';
     ctx.beginPath();
-    ctx.moveTo(x + 10, y - 26); ctx.lineTo(x + 15, y - 29);
-    ctx.lineTo(x + 15, y - 3); ctx.lineTo(x + 10, y);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 10, y - 26);
+    ctx.lineTo(x + 15, y - 29);
+    ctx.lineTo(x + 15, y - 3);
+    ctx.lineTo(x + 10, y);
+    ctx.closePath();
+    ctx.fill();
     // Stone block lines
-    ctx.strokeStyle = '#5A5A5A'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#5A5A5A';
+    ctx.lineWidth = 0.5;
     for (let i = 1; i < 5; i++) {
       const ly = y - i * 5;
-      ctx.beginPath(); ctx.moveTo(x - 10, ly); ctx.lineTo(x + 10, ly); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 10, ly);
+      ctx.lineTo(x + 10, ly);
+      ctx.stroke();
     }
     // Crenellations (battlements)
     ctx.fillStyle = '#777';
@@ -936,7 +1126,9 @@ Game.Renderer = {
     // Ballista on top
     ctx.fillStyle = '#5D3A0A';
     ctx.fillRect(x - 6, y - 30, 12, 3); // base
-    ctx.save(); ctx.translate(x, y - 31); ctx.rotate(f);
+    ctx.save();
+    ctx.translate(x, y - 31);
+    ctx.rotate(f);
     // Ballista arms
     ctx.fillStyle = '#4A3018';
     ctx.fillRect(-1.5, -1, 16, 2);
@@ -947,35 +1139,54 @@ Game.Renderer = {
   // Frost Tower: crystalline ice spire with magical runes
   _tFrost(ctx, x, y, f) {
     ctx.save();
-    ctx.shadowColor = '#88DDFF'; ctx.shadowBlur = 12;
+    ctx.shadowColor = '#88DDFF';
+    ctx.shadowBlur = 12;
     // Base cylinder
     ctx.fillStyle = '#5588AA';
     ctx.fillRect(x - 8, y - 16, 16, 16);
     ctx.fillStyle = '#447799';
     ctx.beginPath();
-    ctx.moveTo(x + 8, y - 16); ctx.lineTo(x + 12, y - 18);
-    ctx.lineTo(x + 12, y - 2); ctx.lineTo(x + 8, y);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 8, y - 16);
+    ctx.lineTo(x + 12, y - 18);
+    ctx.lineTo(x + 12, y - 2);
+    ctx.lineTo(x + 8, y);
+    ctx.closePath();
+    ctx.fill();
     // Ice crystal spire
     const sg = ctx.createLinearGradient(x, y - 46, x, y - 16);
-    sg.addColorStop(0, '#CCEEFF'); sg.addColorStop(0.5, '#88CCEE'); sg.addColorStop(1, '#5599BB');
+    sg.addColorStop(0, '#CCEEFF');
+    sg.addColorStop(0.5, '#88CCEE');
+    sg.addColorStop(1, '#5599BB');
     ctx.fillStyle = sg;
     ctx.beginPath();
-    ctx.moveTo(x, y - 46); ctx.lineTo(x - 7, y - 16); ctx.lineTo(x + 7, y - 16);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x, y - 46);
+    ctx.lineTo(x - 7, y - 16);
+    ctx.lineTo(x + 7, y - 16);
+    ctx.closePath();
+    ctx.fill();
     // Crystal facet line
-    ctx.strokeStyle = 'rgba(200,240,255,0.4)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, y - 46); ctx.lineTo(x + 2, y - 16); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, y - 46); ctx.lineTo(x - 3, y - 16); ctx.stroke();
+    ctx.strokeStyle = 'rgba(200,240,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 46);
+    ctx.lineTo(x + 2, y - 16);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - 46);
+    ctx.lineTo(x - 3, y - 16);
+    ctx.stroke();
     ctx.restore();
     // Rune on base
-    ctx.strokeStyle = 'rgba(150,220,255,0.6)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(150,220,255,0.6)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x - 3, y - 12); ctx.lineTo(x, y - 6); ctx.lineTo(x + 3, y - 12);
+    ctx.moveTo(x - 3, y - 12);
+    ctx.lineTo(x, y - 6);
+    ctx.lineTo(x + 3, y - 12);
     ctx.stroke();
     // Orbiting ice particles
     for (let i = 0; i < 4; i++) {
-      const a = this.time * 1.8 + i * Math.PI / 2;
+      const a = this.time * 1.8 + (i * Math.PI) / 2;
       const r = 14;
       ctx.fillStyle = 'rgba(180,230,255,0.6)';
       ctx.beginPath();
@@ -988,30 +1199,45 @@ Game.Renderer = {
   _tLightning(ctx, x, y, f) {
     // Stone base
     const bg = ctx.createLinearGradient(x - 7, y - 20, x + 7, y);
-    bg.addColorStop(0, '#998866'); bg.addColorStop(0.5, '#887858'); bg.addColorStop(1, '#776848');
+    bg.addColorStop(0, '#998866');
+    bg.addColorStop(0.5, '#887858');
+    bg.addColorStop(1, '#776848');
     ctx.fillStyle = bg;
     ctx.fillRect(x - 7, y - 20, 14, 20);
     ctx.fillStyle = '#776848';
     ctx.beginPath();
-    ctx.moveTo(x + 7, y - 20); ctx.lineTo(x + 11, y - 22);
-    ctx.lineTo(x + 11, y - 2); ctx.lineTo(x + 7, y);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 7, y - 20);
+    ctx.lineTo(x + 11, y - 22);
+    ctx.lineTo(x + 11, y - 2);
+    ctx.lineTo(x + 7, y);
+    ctx.closePath();
+    ctx.fill();
     // Upper tower (narrower)
     ctx.fillStyle = '#998868';
     ctx.fillRect(x - 5, y - 32, 10, 12);
     // Conical roof
     ctx.fillStyle = '#4444AA';
     ctx.beginPath();
-    ctx.moveTo(x, y - 42); ctx.lineTo(x - 7, y - 32); ctx.lineTo(x + 7, y - 32);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#333399'; ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.moveTo(x, y - 42);
+    ctx.lineTo(x - 7, y - 32);
+    ctx.lineTo(x + 7, y - 32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#333399';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
     // Glowing orb on top
     ctx.save();
-    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 10 + Math.sin(this.time * 5) * 4;
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 10 + Math.sin(this.time * 5) * 4;
     ctx.fillStyle = '#FFE844';
-    ctx.beginPath(); ctx.arc(x, y - 42, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 42, 3.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#FFFFAA';
-    ctx.beginPath(); ctx.arc(x - 1, y - 43, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 1, y - 43, 1.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     // Window glow
     ctx.fillStyle = '#FFD700';
@@ -1020,7 +1246,8 @@ Game.Renderer = {
     ctx.globalAlpha = 1;
     // Magical arcs
     if (Math.random() < 0.25) {
-      ctx.strokeStyle = 'rgba(255,255,100,0.5)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,100,0.5)';
+      ctx.lineWidth = 1;
       const a = Math.random() * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(x + Math.cos(a) * 4, y - 42 + Math.sin(a) * 4);
@@ -1033,20 +1260,29 @@ Game.Renderer = {
   _tSniper(ctx, x, y, f) {
     // Tall stone body
     const wg = ctx.createLinearGradient(x - 6, y, x + 6, y);
-    wg.addColorStop(0, '#554444'); wg.addColorStop(0.5, '#665555'); wg.addColorStop(1, '#4A3A3A');
+    wg.addColorStop(0, '#554444');
+    wg.addColorStop(0.5, '#665555');
+    wg.addColorStop(1, '#4A3A3A');
     ctx.fillStyle = wg;
     ctx.fillRect(x - 6, y - 40, 12, 40);
     // Side face
     ctx.fillStyle = '#3A2E2E';
     ctx.beginPath();
-    ctx.moveTo(x + 6, y - 40); ctx.lineTo(x + 10, y - 42);
-    ctx.lineTo(x + 10, y - 2); ctx.lineTo(x + 6, y);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 6, y - 40);
+    ctx.lineTo(x + 10, y - 42);
+    ctx.lineTo(x + 10, y - 2);
+    ctx.lineTo(x + 6, y);
+    ctx.closePath();
+    ctx.fill();
     // Stone lines
-    ctx.strokeStyle = '#3A2E2E'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#3A2E2E';
+    ctx.lineWidth = 0.5;
     for (let i = 1; i < 8; i++) {
       const ly = y - i * 5;
-      ctx.beginPath(); ctx.moveTo(x - 6, ly); ctx.lineTo(x + 6, ly); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 6, ly);
+      ctx.lineTo(x + 6, ly);
+      ctx.stroke();
     }
     // Battlements
     ctx.fillStyle = '#554444';
@@ -1057,23 +1293,33 @@ Game.Renderer = {
     ctx.fillRect(x - 1, y - 16, 2, 5);
     ctx.fillRect(x - 1, y - 30, 2, 5);
     // Crossbow at top
-    ctx.save(); ctx.translate(x, y - 42); ctx.rotate(f);
-    ctx.fillStyle = '#333'; ctx.fillRect(0, -1, 10, 2);
+    ctx.save();
+    ctx.translate(x, y - 42);
+    ctx.rotate(f);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(0, -1, 10, 2);
     ctx.fillRect(6, -4, 1.5, 8);
     ctx.restore();
     // Red pennant/flag
     ctx.fillStyle = '#CC2222';
     ctx.beginPath();
-    ctx.moveTo(x + 3, y - 48); ctx.lineTo(x + 12, y - 44);
-    ctx.lineTo(x + 3, y - 40); ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 3, y - 48);
+    ctx.lineTo(x + 12, y - 44);
+    ctx.lineTo(x + 3, y - 40);
+    ctx.closePath();
+    ctx.fill();
     // Flag pole
-    ctx.fillStyle = '#444'; ctx.fillRect(x + 2, y - 50, 2, 12);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(x + 2, y - 50, 2, 12);
     // Scope lens glow
     ctx.save();
-    ctx.shadowColor = '#FF4444'; ctx.shadowBlur = 4;
+    ctx.shadowColor = '#FF4444';
+    ctx.shadowBlur = 4;
     ctx.fillStyle = '#FF4444';
     ctx.globalAlpha = 0.5 + Math.sin(this.time * 2) * 0.3;
-    ctx.beginPath(); ctx.arc(x + 10, y - 42, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 10, y - 42, 1.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
   },
@@ -1085,13 +1331,20 @@ Game.Renderer = {
     ctx.fillRect(x - 9, y - 22, 18, 22);
     ctx.fillStyle = '#333';
     ctx.beginPath();
-    ctx.moveTo(x + 9, y - 22); ctx.lineTo(x + 13, y - 24);
-    ctx.lineTo(x + 13, y - 2); ctx.lineTo(x + 9, y);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 9, y - 22);
+    ctx.lineTo(x + 13, y - 24);
+    ctx.lineTo(x + 13, y - 2);
+    ctx.lineTo(x + 9, y);
+    ctx.closePath();
+    ctx.fill();
     // Stone lines
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 0.5;
     for (let i = 1; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo(x - 9, y - i * 6); ctx.lineTo(x + 9, y - i * 6); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y - i * 6);
+      ctx.lineTo(x + 9, y - i * 6);
+      ctx.stroke();
     }
     // Iron rim at top
     ctx.fillStyle = '#555';
@@ -1099,10 +1352,12 @@ Game.Renderer = {
     // Brazier bowl
     ctx.fillStyle = '#3A3A3A';
     ctx.beginPath();
-    ctx.moveTo(x - 7, y - 26); ctx.quadraticCurveTo(x - 8, y - 22, x - 5, y - 22);
+    ctx.moveTo(x - 7, y - 26);
+    ctx.quadraticCurveTo(x - 8, y - 22, x - 5, y - 22);
     ctx.lineTo(x + 5, y - 22);
     ctx.quadraticCurveTo(x + 8, y - 22, x + 7, y - 26);
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
+    ctx.fill();
     // Hot coals glow
     ctx.fillStyle = '#FF4400';
     ctx.globalAlpha = 0.6;
@@ -1110,7 +1365,8 @@ Game.Renderer = {
     ctx.globalAlpha = 1;
     // Animated fire
     ctx.save();
-    ctx.shadowColor = '#FF6600'; ctx.shadowBlur = 10 + Math.sin(this.time * 6) * 4;
+    ctx.shadowColor = '#FF6600';
+    ctx.shadowBlur = 10 + Math.sin(this.time * 6) * 4;
     for (let i = 0; i < 3; i++) {
       const fx = x - 3 + i * 3 + Math.sin(this.time * 8 + i * 2) * 1.5;
       const fh = 8 + Math.sin(this.time * 10 + i * 3) * 3;
@@ -1125,16 +1381,20 @@ Game.Renderer = {
       ctx.moveTo(fx - 2, fy);
       ctx.quadraticCurveTo(fx - 1.5, fy - fh * 0.6, fx + Math.sin(this.time * 12 + i) * 2, fy - fh);
       ctx.quadraticCurveTo(fx + 1.5, fy - fh * 0.6, fx + 2, fy);
-      ctx.closePath(); ctx.fill();
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
     // Mouth/opening
     ctx.fillStyle = '#222';
     ctx.beginPath();
-    ctx.arc(x, y - 8, 3, 0, Math.PI); ctx.fill();
+    ctx.arc(x, y - 8, 3, 0, Math.PI);
+    ctx.fill();
     ctx.fillStyle = '#FF4400';
     ctx.globalAlpha = 0.4 + Math.sin(this.time * 4) * 0.2;
-    ctx.beginPath(); ctx.arc(x, y - 8, 2, 0, Math.PI); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 2, 0, Math.PI);
+    ctx.fill();
     ctx.globalAlpha = 1;
   },
 
@@ -1176,32 +1436,58 @@ Game.Renderer = {
     // Shield bubble
     if (enemy.shieldHp > 0) {
       const sa = 0.25 + 0.35 * (enemy.shieldHp / enemy.maxShieldHp);
-      ctx.save(); ctx.shadowColor = '#4488FF'; ctx.shadowBlur = 5;
-      ctx.beginPath(); ctx.arc(sx, drawY - r * 0.3, r + 4, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(68,136,255,${sa})`; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = `rgba(68,136,255,${sa * 0.1})`; ctx.fill();
+      ctx.save();
+      ctx.shadowColor = '#4488FF';
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.arc(sx, drawY - r * 0.3, r + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(68,136,255,${sa})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(68,136,255,${sa * 0.1})`;
+      ctx.fill();
       ctx.restore();
     }
 
     // Draw humanoid sprite based on type
     const flash = enemy.hitFlash > 0;
     switch (enemy.type) {
-      case 'goblin': this._sprGoblin(ctx, sx, drawY, r, walk, flash); break;
-      case 'soldier': this._sprSoldier(ctx, sx, drawY, r, walk, flash); break;
-      case 'wolf_rider': this._sprWolfRider(ctx, sx, drawY, r, walk, flash); break;
-      case 'knight': this._sprKnight(ctx, sx, drawY, r, walk, flash); break;
-      case 'healer': this._sprHealer(ctx, sx, drawY, r, walk, flash); break;
-      case 'flyer': this._sprFlyer(ctx, sx, drawY, r, walk, flash); break;
-      case 'shielded': this._sprShielded(ctx, sx, drawY, r, walk, flash); break;
-      case 'boss': this._sprBoss(ctx, sx, drawY, r, walk, flash); break;
-      default: this._sprSoldier(ctx, sx, drawY, r, walk, flash); break;
+      case 'goblin':
+        this._sprGoblin(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'soldier':
+        this._sprSoldier(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'wolf_rider':
+        this._sprWolfRider(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'knight':
+        this._sprKnight(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'healer':
+        this._sprHealer(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'flyer':
+        this._sprFlyer(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'shielded':
+        this._sprShielded(ctx, sx, drawY, r, walk, flash);
+        break;
+      case 'boss':
+        this._sprBoss(ctx, sx, drawY, r, walk, flash);
+        break;
+      default:
+        this._sprSoldier(ctx, sx, drawY, r, walk, flash);
+        break;
     }
 
     // Hit flash overlay
     if (flash) {
       ctx.globalAlpha = enemy.hitFlash * 0.4;
       ctx.fillStyle = '#FFF';
-      ctx.beginPath(); ctx.arc(sx, drawY - r * 0.4, r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(sx, drawY - r * 0.4, r, 0, Math.PI * 2);
+      ctx.fill();
       ctx.globalAlpha = 1;
     }
 
@@ -1215,32 +1501,44 @@ Game.Renderer = {
 
     // Health bar
     if (enemy.hp < enemy.maxHp) {
-      const bw = r * 2.2, bh = 3;
-      const bx = sx - bw / 2, by = drawY - r * 1.8 - 6;
+      const bw = r * 2.2,
+        bh = 3;
+      const bx = sx - bw / 2,
+        by = drawY - r * 1.8 - 6;
       const ratio = enemy.hp / enemy.maxHp;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-      ctx.fillStyle = ratio > 0.6 ? '#44cc44' : (ratio > 0.3 ? '#cccc44' : '#cc4444');
+      ctx.fillStyle = ratio > 0.6 ? '#44cc44' : ratio > 0.3 ? '#cccc44' : '#cc4444';
       ctx.fillRect(bx, by, bw * ratio, bh);
     }
 
     // Status effects
     if (enemy.stunned) {
-      ctx.fillStyle = '#FFFF00'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#FFFF00';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
       ctx.fillText('\u2726', sx, drawY - r * 1.8 - 10);
     }
-    if (enemy.statusEffects.some(e => e.type === 'slow')) {
-      ctx.strokeStyle = 'rgba(136,204,238,0.5)'; ctx.lineWidth = 1.5;
+    if (enemy.statusEffects.some((e) => e.type === 'slow')) {
+      ctx.strokeStyle = 'rgba(136,204,238,0.5)';
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
-      ctx.beginPath(); ctx.arc(sx, drawY - r * 0.3, r + 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx, drawY - r * 0.3, r + 2, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
-    if (enemy.statusEffects.some(e => e.type === 'dot')) {
+    if (enemy.statusEffects.some((e) => e.type === 'dot')) {
       for (let i = 0; i < 2; i++) {
         ctx.fillStyle = `rgba(255,${100 + Math.floor(Math.random() * 100)},0,0.6)`;
         ctx.beginPath();
-        ctx.arc(sx + (Math.random() - 0.5) * r, drawY - r * 0.3 + (Math.random() - 0.5) * r,
-          1.5, 0, Math.PI * 2);
+        ctx.arc(
+          sx + (Math.random() - 0.5) * r,
+          drawY - r * 0.3 + (Math.random() - 0.5) * r,
+          1.5,
+          0,
+          Math.PI * 2
+        );
         ctx.fill();
       }
     }
@@ -1268,7 +1566,9 @@ Game.Renderer = {
     ctx.fillRect(x + 3.5 * s, y - 6 * s - walk, 2.5 * s, 5 * s);
     // Head (green)
     ctx.fillStyle = '#44AA44';
-    ctx.beginPath(); ctx.arc(x, y - 9 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 9 * s, 3.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Eyes
     ctx.fillStyle = '#FF0';
     ctx.fillRect(x - 2 * s, y - 10 * s, 1.5 * s, 1.5 * s);
@@ -1276,11 +1576,15 @@ Game.Renderer = {
     // Pointed ears
     ctx.fillStyle = '#44AA44';
     ctx.beginPath();
-    ctx.moveTo(x - 3.5 * s, y - 10 * s); ctx.lineTo(x - 6 * s, y - 12 * s);
-    ctx.lineTo(x - 3 * s, y - 8.5 * s); ctx.fill();
+    ctx.moveTo(x - 3.5 * s, y - 10 * s);
+    ctx.lineTo(x - 6 * s, y - 12 * s);
+    ctx.lineTo(x - 3 * s, y - 8.5 * s);
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 3.5 * s, y - 10 * s); ctx.lineTo(x + 6 * s, y - 12 * s);
-    ctx.lineTo(x + 3 * s, y - 8.5 * s); ctx.fill();
+    ctx.moveTo(x + 3.5 * s, y - 10 * s);
+    ctx.lineTo(x + 6 * s, y - 12 * s);
+    ctx.lineTo(x + 3 * s, y - 8.5 * s);
+    ctx.fill();
     // Dagger in right hand
     ctx.fillStyle = '#AAA';
     ctx.fillRect(x + 4 * s, y - 8 * s, 1.5 * s, 5 * s);
@@ -1301,34 +1605,50 @@ Game.Renderer = {
     ctx.fillStyle = '#888';
     ctx.fillRect(x - 5 * s, y - 9 * s, 10 * s, 8 * s);
     // Chain mail texture
-    ctx.strokeStyle = '#777'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 0.5;
     for (let i = 0; i < 3; i++) {
-      ctx.beginPath(); ctx.moveTo(x - 4 * s, y - (3 + i * 2) * s);
-      ctx.lineTo(x + 4 * s, y - (3 + i * 2) * s); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 4 * s, y - (3 + i * 2) * s);
+      ctx.lineTo(x + 4 * s, y - (3 + i * 2) * s);
+      ctx.stroke();
     }
     // Shield (left arm) - round wooden shield
     ctx.fillStyle = '#8B5A2B';
-    ctx.beginPath(); ctx.arc(x - 6 * s, y - 5 * s, 5 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x - 6 * s, y - 5 * s, 5 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x - 6 * s, y - 5 * s, 5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x - 6 * s, y - 5 * s, 5 * s, 0, Math.PI * 2);
+    ctx.stroke();
     // Shield boss (metal center)
     ctx.fillStyle = '#AAA';
-    ctx.beginPath(); ctx.arc(x - 6 * s, y - 5 * s, 1.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 6 * s, y - 5 * s, 1.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Axe (right arm)
     ctx.fillStyle = '#5A3A1A';
     ctx.fillRect(x + 5 * s, y - 10 * s, 1.5 * s, 9 * s); // handle
     ctx.fillStyle = '#888';
     ctx.beginPath(); // axe head
-    ctx.moveTo(x + 5 * s, y - 10 * s); ctx.lineTo(x + 9 * s, y - 12 * s);
-    ctx.lineTo(x + 9 * s, y - 8 * s); ctx.lineTo(x + 5 * s, y - 9 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 5 * s, y - 10 * s);
+    ctx.lineTo(x + 9 * s, y - 12 * s);
+    ctx.lineTo(x + 9 * s, y - 8 * s);
+    ctx.lineTo(x + 5 * s, y - 9 * s);
+    ctx.closePath();
+    ctx.fill();
     // Head
     ctx.fillStyle = '#D4A574';
-    ctx.beginPath(); ctx.arc(x, y - 12 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 12 * s, 3.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Viking helmet
     ctx.fillStyle = '#777';
     ctx.beginPath();
-    ctx.arc(x, y - 13 * s, 4 * s, Math.PI, 0); ctx.fill();
+    ctx.arc(x, y - 13 * s, 4 * s, Math.PI, 0);
+    ctx.fill();
     // Helmet nasal guard
     ctx.fillStyle = '#666';
     ctx.fillRect(x - 0.8 * s, y - 13 * s, 1.6 * s, 3 * s);
@@ -1364,13 +1684,18 @@ Game.Renderer = {
     ctx.fill();
     // Wolf ear
     ctx.beginPath();
-    ctx.moveTo(x + 7 * s, wolfY - 6 * s); ctx.lineTo(x + 9 * s, wolfY - 8 * s);
-    ctx.lineTo(x + 10 * s, wolfY - 5 * s); ctx.fill();
+    ctx.moveTo(x + 7 * s, wolfY - 6 * s);
+    ctx.lineTo(x + 9 * s, wolfY - 8 * s);
+    ctx.lineTo(x + 10 * s, wolfY - 5 * s);
+    ctx.fill();
     // Wolf eye
-    ctx.fillStyle = '#FF0'; ctx.beginPath();
-    ctx.arc(x + 9 * s, wolfY - 4 * s, 0.8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FF0';
+    ctx.beginPath();
+    ctx.arc(x + 9 * s, wolfY - 4 * s, 0.8 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Wolf tail
-    ctx.strokeStyle = '#5A3A1A'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#5A3A1A';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x - 7 * s, wolfY - 3 * s);
     ctx.quadraticCurveTo(x - 10 * s, wolfY - 6 * s, x - 9 * s, wolfY - 8 * s);
@@ -1380,18 +1705,24 @@ Game.Renderer = {
     ctx.fillRect(x - 2 * s, wolfY - 11 * s, 5 * s, 6 * s);
     // Rider head
     ctx.fillStyle = '#D4A574';
-    ctx.beginPath(); ctx.arc(x + 0.5 * s, wolfY - 13 * s, 2.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 0.5 * s, wolfY - 13 * s, 2.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Fur cap
     ctx.fillStyle = '#6B4A2A';
-    ctx.beginPath(); ctx.arc(x + 0.5 * s, wolfY - 14 * s, 3 * s, Math.PI, 0); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 0.5 * s, wolfY - 14 * s, 3 * s, Math.PI, 0);
+    ctx.fill();
     // Spear
     ctx.fillStyle = '#5A4A2A';
     ctx.fillRect(x + 3 * s, wolfY - 18 * s, 1.5 * s, 14 * s);
     ctx.fillStyle = '#AAA';
     ctx.beginPath();
     ctx.moveTo(x + 3.75 * s, wolfY - 20 * s);
-    ctx.lineTo(x + 2 * s, wolfY - 17 * s); ctx.lineTo(x + 5.5 * s, wolfY - 17 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.lineTo(x + 2 * s, wolfY - 17 * s);
+    ctx.lineTo(x + 5.5 * s, wolfY - 17 * s);
+    ctx.closePath();
+    ctx.fill();
   },
 
   // Knight: full plate armor with great sword and cape
@@ -1400,10 +1731,12 @@ Game.Renderer = {
     // Cape (behind)
     ctx.fillStyle = '#8B0000';
     ctx.beginPath();
-    ctx.moveTo(x - 3 * s, y - 12 * s); ctx.lineTo(x + 3 * s, y - 12 * s);
+    ctx.moveTo(x - 3 * s, y - 12 * s);
+    ctx.lineTo(x + 3 * s, y - 12 * s);
     ctx.lineTo(x + 5 * s, y + 2 * s + Math.sin(this.time * 3) * 2);
     ctx.lineTo(x - 5 * s, y + 2 * s - Math.sin(this.time * 3) * 2);
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
+    ctx.fill();
     // Legs (plate)
     ctx.fillStyle = '#AAAAAA';
     ctx.fillRect(x - 4 * s, y - 2 * s + walk * 2, 3 * s, 7 * s);
@@ -1414,13 +1747,19 @@ Game.Renderer = {
     ctx.fillRect(x + 0.5 * s, y + 4 * s - walk * 2, 4 * s, 2.5 * s);
     // Body (plate armor)
     const ag = ctx.createLinearGradient(x - 6 * s, y - 12 * s, x + 6 * s, y - 3 * s);
-    ag.addColorStop(0, '#C0C0C0'); ag.addColorStop(0.5, '#E0E0E0'); ag.addColorStop(1, '#999');
+    ag.addColorStop(0, '#C0C0C0');
+    ag.addColorStop(0.5, '#E0E0E0');
+    ag.addColorStop(1, '#999');
     ctx.fillStyle = ag;
     ctx.fillRect(x - 6 * s, y - 12 * s, 12 * s, 10 * s);
     // Shoulder pauldrons
     ctx.fillStyle = '#B0B0B0';
-    ctx.beginPath(); ctx.arc(x - 6 * s, y - 10 * s, 3 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 6 * s, y - 10 * s, 3 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 6 * s, y - 10 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 6 * s, y - 10 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Great sword
     ctx.fillStyle = '#888';
     ctx.fillRect(x + 7 * s, y - 18 * s, 2 * s, 16 * s);
@@ -1429,8 +1768,10 @@ Game.Renderer = {
     ctx.fillStyle = '#AAA'; // blade tip
     ctx.beginPath();
     ctx.moveTo(x + 8 * s, y - 20 * s);
-    ctx.lineTo(x + 7 * s, y - 18 * s); ctx.lineTo(x + 9 * s, y - 18 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.lineTo(x + 7 * s, y - 18 * s);
+    ctx.lineTo(x + 9 * s, y - 18 * s);
+    ctx.closePath();
+    ctx.fill();
     // Head (great helm)
     ctx.fillStyle = '#B0B0B0';
     ctx.fillRect(x - 4 * s, y - 18 * s, 8 * s, 7 * s);
@@ -1448,13 +1789,19 @@ Game.Renderer = {
     // Robe (long, covers legs)
     ctx.fillStyle = '#2E7D32';
     ctx.beginPath();
-    ctx.moveTo(x - 5 * s, y - 8 * s); ctx.lineTo(x + 5 * s, y - 8 * s);
-    ctx.lineTo(x + 6 * s, y + 4 * s); ctx.lineTo(x - 6 * s, y + 4 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x - 5 * s, y - 8 * s);
+    ctx.lineTo(x + 5 * s, y - 8 * s);
+    ctx.lineTo(x + 6 * s, y + 4 * s);
+    ctx.lineTo(x - 6 * s, y + 4 * s);
+    ctx.closePath();
+    ctx.fill();
     // Robe trim
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x - 6 * s, y + 4 * s); ctx.lineTo(x + 6 * s, y + 4 * s); ctx.stroke();
+    ctx.moveTo(x - 6 * s, y + 4 * s);
+    ctx.lineTo(x + 6 * s, y + 4 * s);
+    ctx.stroke();
     // Sash
     ctx.fillStyle = '#FFD700';
     ctx.fillRect(x - 1 * s, y - 6 * s, 2 * s, 8 * s);
@@ -1467,15 +1814,22 @@ Game.Renderer = {
     ctx.fillRect(x - 8 * s, y - 16 * s, 2 * s, 18 * s);
     // Staff orb
     ctx.save();
-    ctx.shadowColor = '#44FF44'; ctx.shadowBlur = 6 + Math.sin(this.time * 4) * 3;
+    ctx.shadowColor = '#44FF44';
+    ctx.shadowBlur = 6 + Math.sin(this.time * 4) * 3;
     ctx.fillStyle = '#88FF88';
-    ctx.beginPath(); ctx.arc(x - 7 * s, y - 17 * s, 2.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 7 * s, y - 17 * s, 2.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#CCFFCC';
-    ctx.beginPath(); ctx.arc(x - 8 * s, y - 18 * s, 1 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 8 * s, y - 18 * s, 1 * s, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     // Head
     ctx.fillStyle = '#D4A574';
-    ctx.beginPath(); ctx.arc(x, y - 11 * s, 3 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 11 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Hood
     ctx.fillStyle = '#1B5E20';
     ctx.beginPath();
@@ -1490,8 +1844,13 @@ Game.Renderer = {
     if (Math.random() < 0.5) {
       ctx.fillStyle = 'rgba(100,255,100,0.5)';
       ctx.beginPath();
-      ctx.arc(x + (Math.random() - 0.5) * 12 * s, y - 5 * s + (Math.random() - 0.5) * 8 * s,
-        1, 0, Math.PI * 2);
+      ctx.arc(
+        x + (Math.random() - 0.5) * 12 * s,
+        y - 5 * s + (Math.random() - 0.5) * 8 * s,
+        1,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
     }
   },
@@ -1502,15 +1861,20 @@ Game.Renderer = {
     const wingFlap = Math.sin(this.time * 12) * 0.35;
     // Wings (behind body)
     ctx.fillStyle = 'rgba(100,60,140,0.5)';
-    ctx.strokeStyle = '#6644AA'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#6644AA';
+    ctx.lineWidth = 1.5;
     // Left wing
-    ctx.beginPath(); ctx.moveTo(x - 2 * s, y - 5 * s);
+    ctx.beginPath();
+    ctx.moveTo(x - 2 * s, y - 5 * s);
     ctx.quadraticCurveTo(x - 14 * s, y - (12 + wingFlap * 8) * s, x - 3 * s, y - 2 * s);
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
     // Right wing
-    ctx.beginPath(); ctx.moveTo(x + 2 * s, y - 5 * s);
+    ctx.beginPath();
+    ctx.moveTo(x + 2 * s, y - 5 * s);
     ctx.quadraticCurveTo(x + 14 * s, y - (12 + wingFlap * 8) * s, x + 3 * s, y - 2 * s);
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
     // Body (dark armor)
     ctx.fillStyle = '#444';
     ctx.fillRect(x - 3.5 * s, y - 8 * s, 7 * s, 8 * s);
@@ -1520,9 +1884,13 @@ Game.Renderer = {
     ctx.fillRect(x + 0.5 * s, y - 1 * s, 2 * s, 4 * s);
     // Head (dark)
     ctx.fillStyle = '#555';
-    ctx.beginPath(); ctx.arc(x, y - 10 * s, 3 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y - 10 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Glowing eyes
-    ctx.save(); ctx.shadowColor = '#FF0000'; ctx.shadowBlur = 4;
+    ctx.save();
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 4;
     ctx.fillStyle = '#FF4444';
     ctx.fillRect(x - 2 * s, y - 11 * s, 1.5 * s, 1 * s);
     ctx.fillRect(x + 0.5 * s, y - 11 * s, 1.5 * s, 1 * s);
@@ -1530,11 +1898,15 @@ Game.Renderer = {
     // Horns
     ctx.fillStyle = '#333';
     ctx.beginPath();
-    ctx.moveTo(x - 2 * s, y - 12 * s); ctx.lineTo(x - 4 * s, y - 16 * s);
-    ctx.lineTo(x - 1 * s, y - 12 * s); ctx.fill();
+    ctx.moveTo(x - 2 * s, y - 12 * s);
+    ctx.lineTo(x - 4 * s, y - 16 * s);
+    ctx.lineTo(x - 1 * s, y - 12 * s);
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 2 * s, y - 12 * s); ctx.lineTo(x + 4 * s, y - 16 * s);
-    ctx.lineTo(x + 1 * s, y - 12 * s); ctx.fill();
+    ctx.moveTo(x + 2 * s, y - 12 * s);
+    ctx.lineTo(x + 4 * s, y - 16 * s);
+    ctx.lineTo(x + 1 * s, y - 12 * s);
+    ctx.fill();
   },
 
   // Shielded: warrior behind large tower shield
@@ -1553,17 +1925,23 @@ Game.Renderer = {
     ctx.fillRect(x - 3 * s, y - 10 * s, 8 * s, 10 * s);
     // Large tower shield (covers most of front)
     const sg = ctx.createLinearGradient(x - 8 * s, y - 12 * s, x + 2 * s, y);
-    sg.addColorStop(0, '#5588CC'); sg.addColorStop(0.5, '#4477BB'); sg.addColorStop(1, '#3366AA');
+    sg.addColorStop(0, '#5588CC');
+    sg.addColorStop(0.5, '#4477BB');
+    sg.addColorStop(1, '#3366AA');
     ctx.fillStyle = sg;
     ctx.fillRect(x - 8 * s, y - 12 * s, 10 * s, 15 * s);
     // Shield border
-    ctx.strokeStyle = '#889'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#889';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(x - 8 * s, y - 12 * s, 10 * s, 15 * s);
     // Shield emblem (cross)
-    ctx.strokeStyle = '#AAC'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#AAC';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x - 3 * s, y - 10 * s); ctx.lineTo(x - 3 * s, y + 1 * s);
-    ctx.moveTo(x - 7 * s, y - 5 * s); ctx.lineTo(x + 1 * s, y - 5 * s);
+    ctx.moveTo(x - 3 * s, y - 10 * s);
+    ctx.lineTo(x - 3 * s, y + 1 * s);
+    ctx.moveTo(x - 7 * s, y - 5 * s);
+    ctx.lineTo(x + 1 * s, y - 5 * s);
     ctx.stroke();
     // Spear (behind shield, poking up)
     ctx.fillStyle = '#5A3A1A';
@@ -1571,11 +1949,15 @@ Game.Renderer = {
     ctx.fillStyle = '#AAA';
     ctx.beginPath();
     ctx.moveTo(x + 3.75 * s, y - 20 * s);
-    ctx.lineTo(x + 2 * s, y - 17 * s); ctx.lineTo(x + 5.5 * s, y - 17 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.lineTo(x + 2 * s, y - 17 * s);
+    ctx.lineTo(x + 5.5 * s, y - 17 * s);
+    ctx.closePath();
+    ctx.fill();
     // Helmet peek above shield
     ctx.fillStyle = '#888';
-    ctx.beginPath(); ctx.arc(x - 2 * s, y - 14 * s, 3.5 * s, Math.PI, 0); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 2 * s, y - 14 * s, 3.5 * s, Math.PI, 0);
+    ctx.fill();
     // Eyes through helm
     ctx.fillStyle = '#222';
     ctx.fillRect(x - 4 * s, y - 14 * s, 4 * s, 1.5 * s);
@@ -1587,14 +1969,19 @@ Game.Renderer = {
     // Cape (behind, flowing)
     ctx.fillStyle = '#8B0000';
     ctx.beginPath();
-    ctx.moveTo(x - 6 * s, y - 16 * s); ctx.lineTo(x + 6 * s, y - 16 * s);
+    ctx.moveTo(x - 6 * s, y - 16 * s);
+    ctx.lineTo(x + 6 * s, y - 16 * s);
     ctx.lineTo(x + 10 * s, y + 6 * s + Math.sin(this.time * 2.5) * 3);
     ctx.lineTo(x - 10 * s, y + 6 * s - Math.sin(this.time * 2.5) * 3);
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
+    ctx.fill();
     // Cape trim
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x - 10 * s, y + 6 * s); ctx.lineTo(x + 10 * s, y + 6 * s); ctx.stroke();
+    ctx.moveTo(x - 10 * s, y + 6 * s);
+    ctx.lineTo(x + 10 * s, y + 6 * s);
+    ctx.stroke();
     // Legs (massive armored)
     ctx.fillStyle = '#888';
     ctx.fillRect(x - 5 * s, y - 2 * s + walk * 2.5, 4 * s, 9 * s);
@@ -1605,38 +1992,58 @@ Game.Renderer = {
     ctx.fillRect(x + 0 * s, y + 6 * s - walk * 2.5, 5 * s, 3 * s);
     // Body (ornate dark plate)
     const bg = ctx.createLinearGradient(x - 8 * s, y, x + 8 * s, y);
-    bg.addColorStop(0, '#555'); bg.addColorStop(0.3, '#777'); bg.addColorStop(0.7, '#777');
+    bg.addColorStop(0, '#555');
+    bg.addColorStop(0.3, '#777');
+    bg.addColorStop(0.7, '#777');
     bg.addColorStop(1, '#444');
     ctx.fillStyle = bg;
     ctx.fillRect(x - 8 * s, y - 16 * s, 16 * s, 15 * s);
     // Gold trim on armor
-    ctx.strokeStyle = '#DAA520'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#DAA520';
+    ctx.lineWidth = 1;
     ctx.strokeRect(x - 7 * s, y - 15 * s, 14 * s, 13 * s);
-    ctx.beginPath(); ctx.moveTo(x, y - 15 * s); ctx.lineTo(x, y - 2 * s); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - 15 * s);
+    ctx.lineTo(x, y - 2 * s);
+    ctx.stroke();
     // Massive shoulder pauldrons with spikes
     ctx.fillStyle = '#666';
-    ctx.beginPath(); ctx.arc(x - 9 * s, y - 14 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 9 * s, y - 14 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - 9 * s, y - 14 * s, 4 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 9 * s, y - 14 * s, 4 * s, 0, Math.PI * 2);
+    ctx.fill();
     // Pauldron spikes
     ctx.fillStyle = '#888';
     ctx.beginPath();
-    ctx.moveTo(x - 9 * s, y - 18 * s); ctx.lineTo(x - 11 * s, y - 22 * s);
-    ctx.lineTo(x - 7 * s, y - 18 * s); ctx.fill();
+    ctx.moveTo(x - 9 * s, y - 18 * s);
+    ctx.lineTo(x - 11 * s, y - 22 * s);
+    ctx.lineTo(x - 7 * s, y - 18 * s);
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 9 * s, y - 18 * s); ctx.lineTo(x + 11 * s, y - 22 * s);
-    ctx.lineTo(x + 7 * s, y - 18 * s); ctx.fill();
+    ctx.moveTo(x + 9 * s, y - 18 * s);
+    ctx.lineTo(x + 11 * s, y - 22 * s);
+    ctx.lineTo(x + 7 * s, y - 18 * s);
+    ctx.fill();
     // Battle axe (massive, right hand)
     ctx.fillStyle = '#5A3A1A';
     ctx.fillRect(x + 10 * s, y - 24 * s, 2.5 * s, 22 * s);
     ctx.fillStyle = '#999';
     ctx.beginPath(); // double-sided axe head
-    ctx.moveTo(x + 10 * s, y - 24 * s); ctx.lineTo(x + 18 * s, y - 28 * s);
-    ctx.lineTo(x + 18 * s, y - 20 * s); ctx.lineTo(x + 10 * s, y - 22 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 10 * s, y - 24 * s);
+    ctx.lineTo(x + 18 * s, y - 28 * s);
+    ctx.lineTo(x + 18 * s, y - 20 * s);
+    ctx.lineTo(x + 10 * s, y - 22 * s);
+    ctx.closePath();
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 13 * s, y - 24 * s); ctx.lineTo(x + 5 * s, y - 28 * s);
-    ctx.lineTo(x + 5 * s, y - 20 * s); ctx.lineTo(x + 13 * s, y - 22 * s);
-    ctx.closePath(); ctx.fill();
+    ctx.moveTo(x + 13 * s, y - 24 * s);
+    ctx.lineTo(x + 5 * s, y - 28 * s);
+    ctx.lineTo(x + 5 * s, y - 20 * s);
+    ctx.lineTo(x + 13 * s, y - 22 * s);
+    ctx.closePath();
+    ctx.fill();
     // Head (horned helm)
     ctx.fillStyle = '#555';
     ctx.fillRect(x - 5 * s, y - 24 * s, 10 * s, 9 * s);
@@ -1648,23 +2055,32 @@ Game.Renderer = {
     // Horns (large)
     ctx.fillStyle = '#AA9966';
     ctx.beginPath();
-    ctx.moveTo(x - 5 * s, y - 22 * s); ctx.quadraticCurveTo(x - 10 * s, y - 30 * s, x - 7 * s, y - 34 * s);
-    ctx.lineTo(x - 3 * s, y - 22 * s); ctx.fill();
+    ctx.moveTo(x - 5 * s, y - 22 * s);
+    ctx.quadraticCurveTo(x - 10 * s, y - 30 * s, x - 7 * s, y - 34 * s);
+    ctx.lineTo(x - 3 * s, y - 22 * s);
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 5 * s, y - 22 * s); ctx.quadraticCurveTo(x + 10 * s, y - 30 * s, x + 7 * s, y - 34 * s);
-    ctx.lineTo(x + 3 * s, y - 22 * s); ctx.fill();
+    ctx.moveTo(x + 5 * s, y - 22 * s);
+    ctx.quadraticCurveTo(x + 10 * s, y - 30 * s, x + 7 * s, y - 34 * s);
+    ctx.lineTo(x + 3 * s, y - 22 * s);
+    ctx.fill();
     // Crown/circlet
     ctx.save();
-    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 4;
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 4;
     ctx.fillStyle = '#FFD700';
     ctx.fillRect(x - 5 * s, y - 24 * s, 10 * s, 2 * s);
     // Crown points
     ctx.beginPath();
-    ctx.moveTo(x - 3 * s, y - 24 * s); ctx.lineTo(x - 2 * s, y - 27 * s);
-    ctx.lineTo(x - 1 * s, y - 24 * s); ctx.fill();
+    ctx.moveTo(x - 3 * s, y - 24 * s);
+    ctx.lineTo(x - 2 * s, y - 27 * s);
+    ctx.lineTo(x - 1 * s, y - 24 * s);
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + 1 * s, y - 24 * s); ctx.lineTo(x + 2 * s, y - 27 * s);
-    ctx.lineTo(x + 3 * s, y - 24 * s); ctx.fill();
+    ctx.moveTo(x + 1 * s, y - 24 * s);
+    ctx.lineTo(x + 2 * s, y - 27 * s);
+    ctx.lineTo(x + 3 * s, y - 24 * s);
+    ctx.fill();
     ctx.restore();
   },
 
@@ -1677,7 +2093,8 @@ Game.Renderer = {
     }
 
     const sp = this.worldToScreen(proj.x, proj.y);
-    const sx = sp.x, sy = sp.y;
+    const sx = sp.x,
+      sy = sp.y;
 
     // Trail
     if (proj.trail && proj.trail.length > 1) {
@@ -1698,34 +2115,53 @@ Game.Renderer = {
 
     if (proj.towerType === 'cannon') {
       const cg = ctx.createRadialGradient(sx - 1, sy - 1, 0, sx, sy, 4);
-      cg.addColorStop(0, '#666'); cg.addColorStop(0.7, '#333'); cg.addColorStop(1, '#111');
+      cg.addColorStop(0, '#666');
+      cg.addColorStop(0.7, '#333');
+      cg.addColorStop(1, '#111');
       ctx.fillStyle = cg;
-      ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+      ctx.fill();
     } else if (proj.towerType === 'frost') {
-      ctx.shadowColor = '#88DDFF'; ctx.shadowBlur = 7;
+      ctx.shadowColor = '#88DDFF';
+      ctx.shadowBlur = 7;
       ctx.fillStyle = '#AADDFF';
       ctx.translate(sx, sy);
       ctx.rotate(this.time * 4);
       ctx.beginPath();
-      ctx.moveTo(0, -3); ctx.lineTo(2.5, 0); ctx.lineTo(0, 3); ctx.lineTo(-2.5, 0);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(0, -3);
+      ctx.lineTo(2.5, 0);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-2.5, 0);
+      ctx.closePath();
+      ctx.fill();
     } else if (proj.towerType === 'sniper') {
-      ctx.shadowColor = '#FF4444'; ctx.shadowBlur = 8;
+      ctx.shadowColor = '#FF4444';
+      ctx.shadowBlur = 8;
       const tsp = this.worldToScreen(proj.tx, proj.ty);
       const angle = Math.atan2(tsp.y - sy, tsp.x - sx);
-      ctx.translate(sx, sy); ctx.rotate(angle);
-      ctx.fillStyle = '#FF4444'; ctx.fillRect(-6, -1, 12, 2);
-      ctx.fillStyle = '#FFAAAA'; ctx.fillRect(-4, -0.5, 8, 1);
+      ctx.translate(sx, sy);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#FF4444';
+      ctx.fillRect(-6, -1, 12, 2);
+      ctx.fillStyle = '#FFAAAA';
+      ctx.fillRect(-4, -0.5, 8, 1);
     } else {
       // Arrow
       const tsp = this.worldToScreen(proj.tx, proj.ty);
       const angle = Math.atan2(tsp.y - sy, tsp.x - sx);
-      ctx.translate(sx, sy); ctx.rotate(angle);
-      ctx.fillStyle = '#8B6914'; ctx.fillRect(-5, -0.5, 8, 1);
+      ctx.translate(sx, sy);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(-5, -0.5, 8, 1);
       ctx.fillStyle = proj.color;
       ctx.beginPath();
-      ctx.moveTo(5, 0); ctx.lineTo(1, -2.5); ctx.lineTo(2, 0); ctx.lineTo(1, 2.5);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(5, 0);
+      ctx.lineTo(1, -2.5);
+      ctx.lineTo(2, 0);
+      ctx.lineTo(1, 2.5);
+      ctx.closePath();
+      ctx.fill();
     }
 
     ctx.restore();
@@ -1738,46 +2174,59 @@ Game.Renderer = {
     ctx.shadowBlur = 12;
 
     const srcSp = this.worldToScreen(proj.sourceX, proj.sourceY);
-    const targetSps = proj.targets.map(t => this.worldToScreen(t.x, t.y));
+    const targetSps = proj.targets.map((t) => this.worldToScreen(t.x, t.y));
 
     // Glow layer
-    ctx.strokeStyle = 'rgba(255,255,100,0.3)'; ctx.lineWidth = 5;
-    let lx = srcSp.x, ly = srcSp.y;
+    ctx.strokeStyle = 'rgba(255,255,100,0.3)';
+    ctx.lineWidth = 5;
+    let lx = srcSp.x,
+      ly = srcSp.y;
     for (const t of targetSps) {
       this._drawJagged(ctx, lx, ly, t.x, t.y);
-      lx = t.x; ly = t.y;
+      lx = t.x;
+      ly = t.y;
     }
 
     // Main
-    ctx.strokeStyle = proj.color; ctx.lineWidth = 2;
-    lx = srcSp.x; ly = srcSp.y;
+    ctx.strokeStyle = proj.color;
+    ctx.lineWidth = 2;
+    lx = srcSp.x;
+    ly = srcSp.y;
     for (const t of targetSps) {
       this._drawJagged(ctx, lx, ly, t.x, t.y);
-      lx = t.x; ly = t.y;
+      lx = t.x;
+      ly = t.y;
     }
 
     // Core
-    ctx.strokeStyle = '#FFF'; ctx.lineWidth = 1;
-    lx = srcSp.x; ly = srcSp.y;
+    ctx.strokeStyle = '#FFF';
+    ctx.lineWidth = 1;
+    lx = srcSp.x;
+    ly = srcSp.y;
     for (const t of targetSps) {
       this._drawJagged(ctx, lx, ly, t.x, t.y);
-      lx = t.x; ly = t.y;
+      lx = t.x;
+      ly = t.y;
     }
 
     // Impact dots
     for (const t of targetSps) {
       ctx.fillStyle = '#FFF';
-      ctx.beginPath(); ctx.arc(t.x, t.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
   },
 
   _drawJagged(ctx, x1, y1, x2, y2) {
-    const dx = x2 - x1, dy = y2 - y1;
+    const dx = x2 - x1,
+      dy = y2 - y1;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const segs = Math.max(3, Math.floor(dist / 12));
-    const px = -dy / dist, py = dx / dist;
+    const px = -dy / dist,
+      py = dx / dist;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     for (let i = 1; i < segs; i++) {
@@ -1806,7 +2255,11 @@ Game.Renderer = {
     }
     hex = hex.replace('#', '');
     if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-    return [parseInt(hex.substr(0, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(4, 2), 16)];
+    return [
+      parseInt(hex.substr(0, 2), 16),
+      parseInt(hex.substr(2, 2), 16),
+      parseInt(hex.substr(4, 2), 16),
+    ];
   },
   _hexToRgb(hex) {
     const c = this._parseHex(hex);
