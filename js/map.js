@@ -47,7 +47,7 @@ Game.Map = {
   },
 
   hasTowerAt(col, row, towers) {
-    return towers.some(t => t.col === col && t.row === row);
+    return towers.some((t) => t.col === col && t.row === row);
   },
 
   isCastleAt(col, row) {
@@ -56,9 +56,9 @@ Game.Map = {
 
   // Quick check for hover preview (no pathfinding)
   canPlaceBasic(col, row, towers) {
-    return this.isBuildable(col, row) &&
-           !this.hasTowerAt(col, row, towers) &&
-           !this.isCastleAt(col, row);
+    return (
+      this.isBuildable(col, row) && !this.hasTowerAt(col, row, towers) && !this.isCastleAt(col, row)
+    );
   },
 
   // Full check including path validation
@@ -118,7 +118,12 @@ Game.Map = {
     const queue = [[this.castleCol, this.castleRow]];
     let head = 0;
 
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    const dirs = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ];
 
     while (head < queue.length) {
       const [col, row] = queue[head++];
@@ -147,3 +152,5 @@ Game.Map = {
     return this._cachedMaxDist;
   },
 };
+
+if (typeof module !== 'undefined') module.exports = { Map: Game.Map };

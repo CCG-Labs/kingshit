@@ -38,24 +38,24 @@ Game.Config = {
   STARTING_LIVES: 20,
   INTEREST_RATE: 0.02,
   INTEREST_CAP: 20,
-  EARLY_START_BONUS: 0.10,
-  SELL_REFUND_RATE: 0.60,
+  EARLY_START_BONUS: 0.1,
+  SELL_REFUND_RATE: 0.6,
   WAVE_HP_SCALING: 1.08,
   WAVE_GOLD_SCALING: 1.03,
   WAVE_ATTACK_SCALING: 1.04,
 
   // Structure HP
   CASTLE_HP: 500,
-  UPGRADE_HP_MULT: 1.40,
+  UPGRADE_HP_MULT: 1.4,
   TOWER_REGEN_RATE: 0.25, // fraction of maxHP per second between waves
   BETWEEN_WAVE_TIME: 15,
   BOSS_LIFE_COST: 5,
 
   // Upgrade scaling per level
-  UPGRADE_DAMAGE_MULT: 1.40,
+  UPGRADE_DAMAGE_MULT: 1.4,
   UPGRADE_RANGE_MULT: 1.15,
-  UPGRADE_RATE_MULT: 0.80, // lower is faster
-  UPGRADE_COST_MULT: 0.60, // fraction of cumulative cost
+  UPGRADE_RATE_MULT: 0.8, // lower is faster
+  UPGRADE_COST_MULT: 0.6, // fraction of cumulative cost
   MAX_TOWER_LEVEL: 3,
 
   // Tower definitions
@@ -103,7 +103,7 @@ Game.Config = {
       projectileColor: '#AADDFF',
       canHitFlying: false,
       special: 'slow',
-      slowAmount: 0.40,
+      slowAmount: 0.4,
       slowDuration: 2.0,
       description: 'Slows enemies',
       l3: '60% slow, 3s duration',
@@ -174,7 +174,10 @@ Game.Config = {
       color: '#44AA44',
       radius: 8,
       flying: false,
-      attackMin: 2, attackMax: 4, attackRate: 1.5, aggression: 0.0,
+      attackMin: 2,
+      attackMax: 4,
+      attackRate: 1.5,
+      aggression: 0.0,
     },
     soldier: {
       name: 'Soldier',
@@ -185,7 +188,10 @@ Game.Config = {
       color: '#888888',
       radius: 10,
       flying: false,
-      attackMin: 5, attackMax: 10, attackRate: 1.2, aggression: 0.3,
+      attackMin: 5,
+      attackMax: 10,
+      attackRate: 1.2,
+      aggression: 0.3,
     },
     wolf_rider: {
       name: 'Wolf Rider',
@@ -197,7 +203,10 @@ Game.Config = {
       radius: 9,
       flying: false,
       shape: 'diamond',
-      attackMin: 3, attackMax: 5, attackRate: 1.0, aggression: 0.0,
+      attackMin: 3,
+      attackMax: 5,
+      attackRate: 1.0,
+      aggression: 0.0,
     },
     knight: {
       name: 'Knight',
@@ -208,7 +217,10 @@ Game.Config = {
       color: '#C0C0C0',
       radius: 13,
       flying: false,
-      attackMin: 10, attackMax: 18, attackRate: 1.5, aggression: 0.8,
+      attackMin: 10,
+      attackMax: 18,
+      attackRate: 1.5,
+      aggression: 0.8,
     },
     healer: {
       name: 'Healer',
@@ -222,7 +234,10 @@ Game.Config = {
       special: 'heal',
       healRate: 5,
       healRange: 60,
-      attackMin: 1, attackMax: 3, attackRate: 2.0, aggression: 0.0,
+      attackMin: 1,
+      attackMax: 3,
+      attackRate: 2.0,
+      aggression: 0.0,
     },
     flyer: {
       name: 'Flyer',
@@ -233,7 +248,10 @@ Game.Config = {
       color: '#9966CC',
       radius: 9,
       flying: true,
-      attackMin: 0, attackMax: 0, attackRate: 0, aggression: 0.0,
+      attackMin: 0,
+      attackMax: 0,
+      attackRate: 0,
+      aggression: 0.0,
     },
     shielded: {
       name: 'Shielded',
@@ -246,7 +264,10 @@ Game.Config = {
       flying: false,
       special: 'shield',
       shieldHp: 80,
-      attackMin: 4, attackMax: 8, attackRate: 1.3, aggression: 0.2,
+      attackMin: 4,
+      attackMax: 8,
+      attackRate: 1.3,
+      aggression: 0.2,
     },
     boss: {
       name: 'Boss',
@@ -257,7 +278,10 @@ Game.Config = {
       color: '#CC2222',
       radius: 20,
       flying: false,
-      attackMin: 20, attackMax: 35, attackRate: 2.0, aggression: 1.0,
+      attackMin: 20,
+      attackMax: 35,
+      attackRate: 2.0,
+      aggression: 1.0,
     },
   },
 
@@ -292,3 +316,5 @@ Game.Config = {
     placementInvalid: 'rgba(255,0,0,0.3)',
   },
 };
+
+if (typeof module !== 'undefined') module.exports = { Config: Game.Config };

@@ -80,7 +80,7 @@ Game.Tower = class Tower {
   applyL3Upgrade() {
     switch (this.type) {
       case 'frost':
-        this.slowAmount = 0.60;
+        this.slowAmount = 0.6;
         this.slowDuration = 3.0;
         break;
       case 'lightning':
@@ -143,7 +143,7 @@ Game.Tower = class Tower {
   }
 
   findTarget(enemies) {
-    const inRange = enemies.filter(e => {
+    const inRange = enemies.filter((e) => {
       if (e.dead || e.escaped) return false;
       if (e.flying && !this.canHitFlying) return false;
       return e.distTo(this.x, this.y) <= this.range;
@@ -153,13 +153,13 @@ Game.Tower = class Tower {
 
     switch (this.targetMode) {
       case 'first':
-        return inRange.reduce((a, b) => b.progress > a.progress ? b : a);
+        return inRange.reduce((a, b) => (b.progress > a.progress ? b : a));
       case 'last':
-        return inRange.reduce((a, b) => b.progress < a.progress ? b : a);
+        return inRange.reduce((a, b) => (b.progress < a.progress ? b : a));
       case 'strongest':
-        return inRange.reduce((a, b) => b.hp > a.hp ? b : a);
+        return inRange.reduce((a, b) => (b.hp > a.hp ? b : a));
       case 'weakest':
-        return inRange.reduce((a, b) => b.hp < a.hp ? b : a);
+        return inRange.reduce((a, b) => (b.hp < a.hp ? b : a));
       case 'nearest':
         return inRange.reduce((a, b) =>
           a.distTo(this.x, this.y) < b.distTo(this.x, this.y) ? a : b
@@ -222,7 +222,7 @@ Game.Tower = class Tower {
     // Create lightning visual
     projectiles.push({
       type: 'lightning',
-      targets: chainTargets.map(t => ({ x: t.x, y: t.y })),
+      targets: chainTargets.map((t) => ({ x: t.x, y: t.y })),
       sourceX: this.x,
       sourceY: this.y,
       life: 0.15,
@@ -259,3 +259,5 @@ Game.Tower = class Tower {
     }
   }
 };
+
+if (typeof module !== 'undefined') module.exports = { Tower: Game.Tower };
