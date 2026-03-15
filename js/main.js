@@ -341,6 +341,21 @@ Game.Main = {
 
     const gameDt = dt * state.gameSpeed;
 
+    // Handle wave timing (auto-start after delay)
+    if (Game.WaveSpawner.betweenWaves && state.kingdom && state.kingdom.waves) {
+      if (!state.kingdom.waves.lastWaveEndTime) {
+        state.kingdom.waves.lastWaveEndTime = now;
+      }
+      const timeSinceWaveEnd = (now - state.kingdom.waves.lastWaveEndTime) / 1000;
+      if (timeSinceWaveEnd > Game.Config.AUTO_WAVE_DELAY / 1000) {
+        // Auto-start wave
+        if (Game.WaveSpawner && !Game.WaveSpawner.allWavesDone) {
+          Game.WaveSpawner.startWave();
+          state.kingdom.waves.lastWaveEndTime = 0;
+        }
+      }
+    }
+
     Game.WaveSpawner.update(gameDt, state);
 
     // Between-wave tower regeneration
@@ -472,6 +487,10 @@ Game.Main = {
           Game.Particles.goldPopup(this.canvas.width / 2, 60, interest);
         }
         Game.WaveSpawner.startBetweenWaves();
+        // Record wave end time for auto-start
+        if (state.kingdom && state.kingdom.waves) {
+          state.kingdom.waves.lastWaveEndTime = now;
+        }
       }
     }
   },
@@ -585,11 +604,21 @@ Game.Main = {
       }
     }
 
-    if (input.isKeyPressed('Enter') && Game.WaveSpawner.betweenWaves) {
-      const bonus = Game.WaveSpawner.startEarly();
-      state.gold += bonus;
-      if (bonus > 0) {
-        Game.Particles.goldPopup(this.canvas.width / 2, this.canvas.height / 2, bonus);
+    // Manual wave start on Enter (or auto-start with bonus)
+    if (input.isKeyPressed('Enter')) {
+      if (Game.WaveSpawner.betweenWaves) {
+        const bonus = Game.WaveSpawner.startEarly();
+        state.gold += bonus;
+        if (bonus > 0) {
+          Game.Particles.goldPopup(this.canvas.width / 2, this.canvas.height / 2, bonus);
+        }
+      } else if (state.gameState === 'placeCastle' && Game.WaveSpawner) {
+        // Start first wave after castle placement
+        Game.WaveSpawner.startWave();
+        state.gameState = 'playing';
+        if (state.kingdom && state.kingdom.waves) {
+          state.kingdom.waves.lastWaveEndTime = 0;
+        }
       }
     }
 
