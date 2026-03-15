@@ -309,4 +309,51 @@ Game.Kingdom = {
       Game.state.kingdom.trees.find((t) => t.col === gridPos.col && t.row === gridPos.row) || null
     );
   },
+
+  /**
+   * Spawn a new tree if timer allows
+   * @param {number} deltaTime - elapsed time in seconds
+   */
+  spawnTree(deltaTime) {
+    if (!Game.state.kingdom) return;
+
+    Game.state.kingdom.nextTreeSpawnTime -= deltaTime;
+    if (Game.state.kingdom.nextTreeSpawnTime <= 0) {
+      const tree = this._spawnTreeAtRandomLocation();
+      if (tree) {
+        Game.state.kingdom.trees.push(tree);
+      }
+      Game.state.kingdom.nextTreeSpawnTime = Game.Config.TREE_SPAWN_INTERVAL / 1000;
+    }
+  },
+
+  /**
+   * Spawn a tree at a random empty location
+   * @private
+   */
+  _spawnTreeAtRandomLocation() {
+    const attempts = Game.Config.TREE_SPAWN_REJECTION_SAMPLES;
+    for (let i = 0; i < attempts; i++) {
+      const col = Math.floor(Math.random() * Game.Config.GRID_COLS);
+      const row = Math.floor(Math.random() * Game.Config.GRID_ROWS);
+
+      if (Game.Map && Game.Map.tiles) {
+        const tile = Game.Map.tiles[row] && Game.Map.tiles[row][col];
+        if (!tile || tile.tileType === Game.Config.TILE.BLOCKED) {
+          continue;
+        }
+      }
+
+      if (this._findTreeAt({ col, row })) {
+        continue;
+      }
+
+      if (Game.state.towers && Game.state.towers.some((t) => t.col === col && t.row === row)) {
+        continue;
+      }
+
+      return { col, row, harvested: false };
+    }
+    return null;
+  },
 };

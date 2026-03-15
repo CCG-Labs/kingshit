@@ -402,6 +402,11 @@ Game.Main = {
       if (!proj.dead) proj.update(gameDt);
     }
 
+    // Spawn trees periodically
+    if (Game.Kingdom && Game.state.kingdom) {
+      Game.Kingdom.spawnTree(gameDt);
+    }
+
     Game.Particles.update(gameDt);
 
     for (const enemy of state.enemies) {
