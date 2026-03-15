@@ -41,33 +41,35 @@ These integrate with existing modules:
 
 ```javascript
 {
-  // ... existing state ...
+  // ... existing state (towers, enemies, projectiles, gold, lives, etc.) ...
 
   resources: {
     wood: 0,
-    stone: 0,
-    // future resources here
+    // stone added in Phase 2 when miners are implemented
   },
 
   population: {
-    current: 5,      // free residents
-    capacity: 5,     // max population
+    current: 5,      // unassigned residents
+    capacity: 5,     // max population (increases with castle level)
     residents: [
-      // { id, assignedJob: 'lumberjack', state: 'seeking', ... }
-    ]
+      // Array of resident objects, see section 3
+    ],
+    jobs: {
+      lumberjack: 0   // number of residents assigned to lumberjack
+    }
   },
 
   castle: {
-    level: 1,        // Stockade to Castle (1-10)
+    level: 1,           // 1-10 (Stockade to Castle)
     hp: 500,
     maxHp: 500,
-    archers: 5,      // number of residents with bows
-    lastArcherTime: 0 // for 5-second fire rate
+    lastArcherFireTime: 0  // for 5-second global archer fire rate
   },
 
   waves: {
     lastWaveEndTime: 0,
-    autoStartDelay: 45000 // ms (configurable)
+    autoStartDelay: 45000, // ms (configurable in config.js)
+    canStartWaveManually: true
   }
 }
 ```
@@ -139,44 +141,64 @@ Lumberjack: 1  [-] [+]
 
 ### Tree Spawning
 
-- **Spawn rate:** 1 tree per minute of gameplay (configurable in config as `TREE_SPAWN_INTERVAL`)
-- **Spawn location:** Random empty cell on buildable or grass terrain (no buildings, rocks, enemies, other trees)
-- **Map limit:** No hard cap yet (can revisit if trees overwhelm the map)
+- **Spawn rate:** 1 tree per minute of gameplay (configurable in config as `TREE_SPAWN_INTERVAL = 60000` ms)
+- **Spawn location:** Randomly select an empty cell on buildable or grass terrain (reject cells with buildings, rocks, enemies, residents, or existing trees)
+- **Spawn algorithm:** Rejection sampling — try up to 10 random cells; if none are empty, skip this spawn cycle
+- **Tree depletion:** Trees respawn naturally. When a lumberjack completes chopping, the tree is removed from the map but re-enters the spawn pool. No tree is permanently consumed.
+- **Map balance:** On a 100×100 map with ~50% buildable terrain, with 1 spawn per minute, expect 3-5 active trees at equilibrium (limited by lumberjack count and island clustering)
 
 ### Resident Work Loop
 
-1. **Idle → Seeking:**
-   - If assigned and on map, search map for nearest tree within visibility range
-   - If found, set target to tree; state = 'moving'
-   - If not found within timeout, stay idle (retry next frame)
+**State Machine Diagram:**
+```
+idle → seeking → moving → working → returning → idle
+                                         ↓
+                    [enemy threat] → fleeing → [safe] → idle
+```
 
-2. **Moving → Working:**
-   - Pathfind to tree using BFS (same as enemies)
-   - On arrival, state = 'working', start progress timer (15s)
-   - Cannot be interrupted (unless killed or forced to flee)
+#### 1. Idle → Seeking
+- If assigned to job, resident checks for available target (tree)
+- **Search algorithm:** Scan all trees on map, find nearest by grid distance
+- **Visibility range:** No hard limit; use all trees on map
+- **Timeout:** If no tree found after 30 seconds (configurable as `SEEK_TIMEOUT = 30000`), go back to idle and retry next cycle
+- **Outcome:** If tree found → set target → state = 'moving'
 
-3. **Working → Returning:**
-   - After 15s, mark tree as "chopped" (remove from map or mark as harvested)
-   - State = 'returning', target = castle position
-   - Pathfind back to castle
+#### 2. Moving → Working
+- Pathfind to tree using BFS (same flow field system as enemies; see `Game.Map.computeFlowField()`)
+- **Path recalculation:** Recalculate every 5 frames (or on target change) to handle dynamic obstacles
+- **Arrival check:** If within 1 grid tile of target, state = 'working'
+- **Stuck detection:** If same position for >10 seconds, pathfinding failed → reset to seeking
+- **Outcome:** On arrival → state = 'working', start progress timer (15s, configurable as `LUMBERJACK_WORK_TIME = 15000`)
 
-4. **Returning → Idle:**
-   - On arrival at castle (within 1 tile), add resource to inventory
-   - State = 'idle', target = null
-   - Go back to step 1
+#### 3. Working → Returning
+- Hold state = 'working' for 15 seconds (timer display: chop animation)
+- **Completion:** After timer elapses, mark tree as harvested (remove from map)
+- **New target:** Set target = castle grid position
+- **Outcome:** state = 'returning'
+
+#### 4. Returning → Idle
+- Pathfind to castle (same BFS as seeking)
+- **Arrival check:** If within 2 grid tiles of castle, resident has "arrived home"
+- **Resource transfer:** Instantly add gathered resource to `Game.state.resources.wood` (no delay)
+- **Outcome:** state = 'idle', target = null, can be reassigned or loop to seeking if still assigned
 
 ### Enemy Interaction
 
-**Fleeing:**
-- If any enemy exists on the map, all active residents switch to state = 'fleeing'
-- They pathfind directly to castle (shortest path, ignore job state)
-- On castle arrival, state = 'idle', can resume work next cycle
+**Fleeing (Threat-Based, not Global):**
+- Residents continuously check if any enemy is within `RESIDENT_THREAT_RANGE` (configurable, suggest 250 pixels)
+- If an enemy enters threat range, that resident immediately switches to state = 'fleeing'
+- Fleeing residents pathfind directly to castle (shortest path, abandon job)
+- On castle arrival, state = 'idle', can resume work if no threats remain
+- **Design rationale:** This allows workers to gather during early waves if threats are elsewhere, and creates spatial risk/reward. It's not all-or-nothing like "any enemy anywhere."
 
-**Combat:**
-- If an enemy attacks a resident, they deal ~5 damage back (configurable)
-- Residents have 10 HP (configurable), can be killed
-- On death: remove resident from game, lose any in-transit resources
-- Weak combat doesn't prevent enemy victory, just provides minor friction
+**Combat (Passive Counter):**
+- When an enemy moves onto/adjacent to a resident (~1 tile range), combat occurs
+- Resident takes damage (varies by enemy type; not specified in this doc, use existing enemy stats)
+- Resident deals **5 damage back** (configurable as `RESIDENT_COMBAT_DMG`)
+- This counter-attack happens once per engagement; resident doesn't actively chase/pursue enemy
+- Residents have **10 HP** (configurable as `RESIDENT_HP`); reaching 0 = death
+- On death: remove resident from game, lose any gathered resources the resident was carrying back to castle
+- **Design rationale:** Weak combat provides minor friction (slows enemy advance slightly, trades worker HP) without making workers viable soldiers. Fleeing is the correct survival strategy.
 
 ### Rendering
 
@@ -188,20 +210,18 @@ Lumberjack: 1  [-] [+]
 
 ## 5. Castle Progression (10 Levels)
 
-All values scale per level. Population capacity and archer stats increase. Costs are cumulative (upgrading from level 1→2 costs resources; upgrading 2→3 costs additional resources, etc.).
+**Phase 1 Scope:** Levels 1-3 (wood only). Levels 4-10 deferred to Phase 2 when stone miners are implemented.
 
-| Lvl | Name | Pop Cap | HP | Archer Dmg | Archer Range | Resource Cost |
+All values scale per level. Population capacity and archer stats increase. Each upgrade is independent (you don't need to unlock in order, but you need resources).
+
+| Lvl | Name | Pop Cap | HP | Archer Dmg | Archer Range | Resource Cost (Phase 1) |
 |-----|------|---------|----|-----------|--------------| --------------|
 | 1 | Stockade | 5 | 500 | 10 | 300 | — (starting) |
 | 2 | Palisade | 8 | 700 | 12 | 320 | 100 wood |
 | 3 | Motte | 12 | 950 | 15 | 350 | 150 wood |
-| 4 | Motte-and-Bailey | 18 | 1300 | 18 | 380 | 100 wood + 75 stone |
-| 5 | Ringwork | 25 | 1750 | 22 | 420 | 150 stone |
-| 6 | Keep | 35 | 2400 | 26 | 460 | 200 stone + 50 wood |
-| 7 | Tower House | 48 | 3200 | 31 | 500 | 300 stone |
-| 8 | Fortress | 65 | 4200 | 37 | 550 | 400 stone |
-| 9 | Citadel | 85 | 5400 | 44 | 600 | 500 stone |
-| 10 | Castle | 110 | 6800 | 52 | 650 | 600 stone |
+| 4–10 | (Deferred to Phase 2) | — | — | — | — | (requires stone) |
+
+**Population Scaling:** When the player upgrades the castle, population capacity increases and new free residents are granted automatically. For example, upgrading from Level 1 (capacity 5) to Level 2 (capacity 8) grants 3 new free residents.
 
 ### Upgrade Mechanics
 
@@ -214,12 +234,13 @@ All values scale per level. Population capacity and archer stats increase. Costs
 
 ### Castle as Archer Defense
 
-- Each resident in the castle gets a bow
-- Castle fires 1 arrow per resident every 5 seconds (configurable as `ARCHER_FIRE_RATE`)
-- Arrows target the nearest enemy in range
+- Each resident in the castle gets a bow (so population size = archer count)
+- **Fire Mechanic:** The castle has a global archer cooldown of 5 seconds (configurable as `Game.Config.ARCHER_FIRE_RATE`). Every 5 seconds, the castle fires **one arrow per available archer** (so 5 archers = 5 arrows per volley)
+- Volley fires simultaneously; each arrow targets the nearest enemy to that archer's vantage point (or a simple targeting system like "nearest enemy overall")
 - Arrow damage scales with castle level (see table)
 - Arrow range scales with castle level (see table)
 - Independent from towers (towers still exist and fire normally)
+- **Important:** Number of archers = current population in castle (whether assigned to jobs or free)
 
 ---
 
@@ -345,28 +366,65 @@ Clicking shows:
 
 ## 10. Configuration Examples (config.js)
 
-All these should be definable in `Game.Config`:
+All these must be definable in `Game.Config` for easy tuning. **KEY DECISION:** All timings and balance numbers live in config, not hardcoded in behavior modules.
 
 ```javascript
-Game.Config.TREE_SPAWN_INTERVAL = 60000;  // 1 tree per minute
-Game.Config.ARCHER_FIRE_RATE = 5000;      // 1 arrow per resident per 5s
-Game.Config.AUTO_WAVE_DELAY = 45000;      // 45s before auto-start
+// === POPULATION & JOBS ===
 Game.Config.RESIDENT_HP = 10;
 Game.Config.RESIDENT_COMBAT_DMG = 5;
+Game.Config.RESIDENT_THREAT_RANGE = 250;  // pixels; if enemy within this, flee
+Game.Config.RESIDENT_SPEED = 80;          // pixels/sec during pathfinding
 
-Game.Config.JOBS = {
-  lumberjack: {
-    workTime: 15000,
-    speed: 80,
-    // ...
-  }
-};
+// === LUMBERJACK JOB ===
+Game.Config.LUMBERJACK_WORK_TIME = 15000;  // ms to chop one tree
+Game.Config.LUMBERJACK_RESOURCE_GAIN = 10; // wood per tree
+Game.Config.SEEK_TIMEOUT = 30000;          // ms; if no tree found, go idle and retry
 
+// === TREE SPAWNING ===
+Game.Config.TREE_SPAWN_INTERVAL = 60000;   // 1 tree per minute
+Game.Config.TREE_SPAWN_REJECTION_SAMPLES = 10; // try up to 10 cells per spawn attempt
+
+// === CASTLE DEFENSE ===
+Game.Config.ARCHER_FIRE_RATE = 5000;  // ms between archer volleys (all archers fire together)
+Game.Config.ARCHER_FIRE_INTERVAL = 0.5; // (alternative) fire rate in volleys/second if preferred
+
+// === CASTLE UPGRADES (Phase 1 only) ===
 Game.Config.CASTLE_UPGRADES = [
-  { level: 1, name: 'Stockade', popCap: 5, hp: 500, ... },
-  { level: 2, name: 'Palisade', popCap: 8, hp: 700, ... },
-  // ...
+  {
+    level: 1,
+    name: 'Stockade',
+    description: 'A simple perimeter of sharpened wooden stakes.',
+    popCapacity: 5,
+    hp: 500,
+    archerDamage: 10,
+    archerRange: 300,
+    cost: {}  // starting level, no cost
+  },
+  {
+    level: 2,
+    name: 'Palisade',
+    description: 'Taller, more deliberate wooden wall construction.',
+    popCapacity: 8,
+    hp: 700,
+    archerDamage: 12,
+    archerRange: 320,
+    cost: { wood: 100 }
+  },
+  {
+    level: 3,
+    name: 'Motte',
+    description: 'An earthen mound with a timber tower on top.',
+    popCapacity: 12,
+    hp: 950,
+    archerDamage: 15,
+    archerRange: 350,
+    cost: { wood: 150 }
+  }
+  // Levels 4-10 deferred to Phase 2
 ];
+
+// === WAVES ===
+Game.Config.AUTO_WAVE_DELAY = 45000;  // ms before auto-starting next wave if player doesn't
 ```
 
 ---
@@ -435,11 +493,22 @@ Manual start gives players agency (play at their pace), but auto-start prevents 
 
 ---
 
-## 14. Open Questions (For Later Phases)
+## 14. Castle Destruction & Game Over
 
-- What happens if castle is destroyed while residents are out? (Do they survive? Return home? Die?)
-- Can residents carry resources and get attacked (lose resources)?
-- Should there be a limit to how many workers gather at once (e.g., only 3 trees per minute)?
-- Should upgraded castles have visual changes (taller walls, more elaborate gates)?
-- When stone miners are added, how are they balanced vs. lumberjacks?
+If castle HP reaches 0:
+- **Game state:** Transition to 'gameover' (existing game-over flow)
+- **Residents:** All active residents are immediately removed from the map
+- **Resources:** Any resources in-transit (held by residents returning) are lost
+- **Design rationale:** Keeps game-over clean. Prevents orphaned workers or resource exploitation at game end.
+
+---
+
+## 15. Open Questions (For Later Phases)
+
+- When stone miners are added (Phase 2), how should their work time compare to lumberjacks? (Longer/shorter?)
+- Should there be a limit to maximum population (e.g., 200 at Castle level 10)?
+- Should upgraded castles have visual changes (taller walls, more elaborate gates) for player feedback?
+- Should lumberjacks have visual variations (different colored sprites per job type)?
+- Can residents be reassigned to different jobs, or locked until unassigned?
+- Should residents have names/individual identity in future phases?
 
