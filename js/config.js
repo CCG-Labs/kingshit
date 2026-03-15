@@ -315,6 +315,76 @@ Game.Config = {
     placementValid: 'rgba(0,255,0,0.3)',
     placementInvalid: 'rgba(255,0,0,0.3)',
   },
+
+  // === KINGDOM-BUILDING (Phase 1) ===
+
+  // Population & Residents
+  RESIDENT_HP: 10,
+  RESIDENT_COMBAT_DMG: 5,
+  RESIDENT_THREAT_RANGE: 250, // pixels; flee if enemy within this
+  RESIDENT_SPEED: 80, // pixels/sec
+
+  // Lumberjack Job
+  LUMBERJACK_WORK_TIME: 15000, // ms to chop one tree
+  LUMBERJACK_RESOURCE_GAIN: 10, // wood per tree
+  SEEK_TIMEOUT: 30000, // ms; if no tree found, give up
+
+  // Tree Spawning
+  TREE_SPAWN_INTERVAL: 60000, // 1 tree per minute
+  TREE_SPAWN_REJECTION_SAMPLES: 10, // rejection sampling attempts
+
+  // Castle & Archers
+  ARCHER_FIRE_RATE: 5000, // ms between archer volleys
+
+  // Wave Timing
+  AUTO_WAVE_DELAY: 45000, // ms before auto-starting next wave
+
+  // Job Definitions
+  JOBS: {
+    lumberjack: {
+      name: 'Lumberjack',
+      description: 'Gathers wood from trees',
+      resourceType: 'wood',
+      resourcePerCompletion: 10, // LUMBERJACK_RESOURCE_GAIN
+      workTime: 15000, // LUMBERJACK_WORK_TIME
+      seekTimeout: 30000, // SEEK_TIMEOUT
+      speed: 80, // RESIDENT_SPEED
+    },
+  },
+
+  // Castle Upgrade Definitions (Phase 1: levels 1-3 only)
+  CASTLE_UPGRADES: [
+    {
+      level: 1,
+      name: 'Stockade',
+      description: 'A simple perimeter of sharpened wooden stakes.',
+      popCapacity: 5,
+      hp: 500,
+      archerDamage: 10,
+      archerRange: 300,
+      cost: {}, // Starting level, no cost
+    },
+    {
+      level: 2,
+      name: 'Palisade',
+      description: 'Taller, more deliberate wooden wall construction.',
+      popCapacity: 8,
+      hp: 700,
+      archerDamage: 12,
+      archerRange: 320,
+      cost: { wood: 100 },
+    },
+    {
+      level: 3,
+      name: 'Motte',
+      description: 'An earthen mound with a timber tower on top.',
+      popCapacity: 12,
+      hp: 950,
+      archerDamage: 15,
+      archerRange: 350,
+      cost: { wood: 150 },
+    },
+  ],
 };
 
 if (typeof module !== 'undefined') module.exports = { Config: Game.Config };
