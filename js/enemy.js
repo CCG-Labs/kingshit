@@ -214,7 +214,7 @@ Game.Enemy = class Enemy {
     // Update progress based on flow field distance
     if (field && field[this.currentRow] && field[this.currentRow][this.currentCol]) {
       const maxDist = Game.Map.getMaxDist();
-      this.progress = 1 - (field[this.currentRow][this.currentCol].dist / maxDist);
+      this.progress = 1 - field[this.currentRow][this.currentCol].dist / maxDist;
     }
   }
 
@@ -269,7 +269,7 @@ Game.Enemy = class Enemy {
   }
 
   applySlow(amount, duration) {
-    const existing = this.statusEffects.find(e => e.type === 'slow');
+    const existing = this.statusEffects.find((e) => e.type === 'slow');
     if (existing) {
       if (amount >= existing.amount) {
         existing.amount = amount;
@@ -281,7 +281,7 @@ Game.Enemy = class Enemy {
   }
 
   applyStun(duration) {
-    const existing = this.statusEffects.find(e => e.type === 'stun');
+    const existing = this.statusEffects.find((e) => e.type === 'stun');
     if (existing) {
       existing.duration = Math.max(existing.duration, duration);
     } else {
@@ -301,7 +301,16 @@ Game.Enemy = class Enemy {
 
   findAdjacentTower() {
     if (!Game.state) return null;
-    const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    const offsets = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+      [-1, -1],
+      [-1, 1],
+      [1, -1],
+      [1, 1],
+    ];
     let best = null;
     let bestHp = Infinity;
     for (const [dx, dy] of offsets) {
@@ -338,7 +347,9 @@ Game.Enemy = class Enemy {
         const cy = Game.Map.castleRow * ts + ts / 2;
         const sp = Game.Renderer.worldToScreen(cx, cy);
         Game.Particles.spawn(sp.x, sp.y - 20, 3, '#FF4400', {
-          speed: 40, life: 0.3, size: 2,
+          speed: 40,
+          life: 0.3,
+          size: 2,
         });
       }
     } else {
@@ -347,7 +358,9 @@ Game.Enemy = class Enemy {
       // Impact particles at tower
       const sp = Game.Renderer.worldToScreen(this.attackTarget.x, this.attackTarget.y);
       Game.Particles.spawn(sp.x, sp.y - 10, 3, '#FF8800', {
-        speed: 40, life: 0.3, size: 2,
+        speed: 40,
+        life: 0.3,
+        size: 2,
       });
     }
   }
@@ -358,3 +371,5 @@ Game.Enemy = class Enemy {
     return Math.sqrt(dx * dx + dy * dy);
   }
 };
+
+if (typeof module !== 'undefined') module.exports = { Enemy: Game.Enemy };
