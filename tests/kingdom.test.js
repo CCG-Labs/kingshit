@@ -1,6 +1,33 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// Load Kingdom module
+// Setup window for Node/Vitest environment
+global.window = global;
+
+// Initialize Game globally once
+global.Game = {
+  Config: {
+    JOBS: {
+      lumberjack: { name: 'Lumberjack', resourceType: 'wood' }
+    },
+    GRID_COLS: 100,
+    GRID_ROWS: 100,
+    TILE_SIZE: 48,
+    LUMBERJACK_WORK_TIME: 15000,
+    LUMBERJACK_RESOURCE_GAIN: 10,
+    SEEK_TIMEOUT: 30000,
+    RESIDENT_THREAT_RANGE: 250,
+    RESIDENT_SPEED: 80
+  },
+  Resources: {
+    add(resourceType, amount) {
+      // Mock resource addition
+    }
+  },
+  Map: null,
+  Renderer: null
+};
+
+// Load Kingdom module to populate Game.Kingdom
 require('../js/kingdom.js');
 
 let mockState;
@@ -12,79 +39,20 @@ beforeEach(() => {
         current: 5,
         capacity: 5,
         residents: [
-          { id: 0, assignedJob: null, state: 'idle', hp: 10 },
-          { id: 1, assignedJob: null, state: 'idle', hp: 10 },
-          { id: 2, assignedJob: null, state: 'idle', hp: 10 },
-          { id: 3, assignedJob: null, state: 'idle', hp: 10 },
-          { id: 4, assignedJob: null, state: 'idle', hp: 10 }
+          { id: 0, assignedJob: null, state: 'idle', hp: 10, gridPos: { col: 0, row: 0 }, progress: 0 },
+          { id: 1, assignedJob: null, state: 'idle', hp: 10, gridPos: { col: 0, row: 0 }, progress: 0 },
+          { id: 2, assignedJob: null, state: 'idle', hp: 10, gridPos: { col: 0, row: 0 }, progress: 0 },
+          { id: 3, assignedJob: null, state: 'idle', hp: 10, gridPos: { col: 0, row: 0 }, progress: 0 },
+          { id: 4, assignedJob: null, state: 'idle', hp: 10, gridPos: { col: 0, row: 0 }, progress: 0 }
         ],
         jobs: { lumberjack: 0 }
-      }
-    }
-  };
-  global.Game = {
-    state: mockState,
-    Config: {
-      JOBS: {
-        lumberjack: { name: 'Lumberjack', resourceType: 'wood' }
-      }
+      },
+      trees: []
     },
-    Kingdom: {
-      getPopulation() {
-        return Game.state.kingdom.population.residents.length;
-      },
-      getCapacity() {
-        return Game.state.kingdom.population.capacity;
-      },
-      getFreeResidents() {
-        return Game.state.kingdom.population.residents.filter(r => !r.assignedJob && r.state !== 'dead').length;
-      },
-      getJobCount(jobType) {
-        return Game.state.kingdom.population.jobs[jobType] || 0;
-      },
-      assignJob(residentId, jobType) {
-        const resident = this.getResident(residentId);
-        if (!resident || resident.assignedJob) {
-          return false;
-        }
-        resident.assignedJob = jobType;
-        resident.state = 'idle';
-        if (!Game.state.kingdom.population.jobs[jobType]) {
-          Game.state.kingdom.population.jobs[jobType] = 0;
-        }
-        Game.state.kingdom.population.jobs[jobType]++;
-        return true;
-      },
-      unassignJob(residentId) {
-        const resident = this.getResident(residentId);
-        if (!resident || !resident.assignedJob) {
-          return false;
-        }
-        const jobType = resident.assignedJob;
-        resident.assignedJob = null;
-        resident.state = 'idle';
-        if (Game.state.kingdom.population.jobs[jobType]) {
-          Game.state.kingdom.population.jobs[jobType]--;
-        }
-        return true;
-      },
-      getResident(id) {
-        return Game.state.kingdom.population.residents.find(r => r.id === id) || null;
-      },
-      killResident(residentId) {
-        const resident = this.getResident(residentId);
-        if (!resident) return;
-        resident.state = 'dead';
-        resident.hp = 0;
-        if (resident.assignedJob) {
-          this.unassignJob(residentId);
-        }
-      },
-      getActiveResidents() {
-        return Game.state.kingdom.population.residents.filter(r => r.state !== 'dead');
-      }
-    }
+    enemies: []
   };
+  // Only update state, don't replace whole Game object
+  Game.state = mockState;
 });
 
 describe('Game.Kingdom', () => {
@@ -150,5 +118,45 @@ describe('Game.Kingdom', () => {
     Game.Kingdom.assignJob(0, 'lumberjack');
     Game.Kingdom.assignJob(1, 'lumberjack');
     expect(Game.Kingdom.getJobCount('lumberjack')).toBe(2);
+  });
+
+  it('resident seeks tree when assigned to lumberjack', () => {
+    Game.state.kingdom.trees = [
+      { col: 10, row: 10, harvested: false },
+      { col: 20, row: 20, harvested: false }
+    ];
+    Game.state.kingdom.population.residents[0].gridPos = { col: 0, row: 0 };
+    Game.Kingdom.assignJob(0, 'lumberjack');
+    Game.Kingdom.updateResident(0, 0.016);
+    const resident = Game.state.kingdom.population.residents[0];
+    expect(resident.state).toBe('moving');
+    expect(resident.target).not.toBeNull();
+  });
+
+  it('resident transitions to working when at tree', () => {
+    const tree = { col: 5, row: 5, harvested: false };
+    Game.state.kingdom.trees = [tree];
+    Game.Config.LUMBERJACK_WORK_TIME = 1000;
+    const resident = Game.state.kingdom.population.residents[0];
+    resident.gridPos = { col: 5, row: 5 };
+    resident.state = 'moving';
+    resident.target = { col: 5, row: 5 };
+    resident.assignedJob = 'lumberjack';
+    Game.Kingdom.updateResident(0, 0.016);
+    expect(resident.state).toBe('working');
+  });
+
+  it('resident flees when enemy nearby', () => {
+    const resident = Game.state.kingdom.population.residents[0];
+    resident.gridPos = { col: 50, row: 50 };
+    resident.state = 'idle';
+    // Mock enemy nearby
+    Game.state.enemies = [{ x: 50 * 48, y: 50 * 48 }];
+    Game.Renderer = {
+      worldToScreen: (x, y) => ({ x, y })
+    };
+    Game.Config.RESIDENT_THREAT_RANGE = 250;
+    Game.Kingdom.updateResident(0, 0.016);
+    expect(resident.state).toBe('fleeing');
   });
 });
