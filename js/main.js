@@ -64,7 +64,51 @@ Game.Main = {
       selectedTower: null,
       paused: false,
       gameSpeed: 1,
+
+      // Kingdom-building state
+      kingdom: {
+        resources: {
+          wood: 0,
+          // stone: 0 (Phase 2)
+        },
+        population: {
+          current: 5, // free residents
+          capacity: 5, // max population
+          residents: [], // array of resident objects
+          jobs: {
+            lumberjack: 0, // count of residents assigned to lumberjack
+          },
+        },
+        castle: {
+          level: 1,
+          hp: 500,
+          maxHp: 500,
+          lastArcherFireTime: 0, // for archer fire cooldown
+        },
+        waves: {
+          lastWaveEndTime: 0,
+          autoStartDelay: Game.Config.AUTO_WAVE_DELAY,
+          canStartWaveManually: true,
+        },
+        nextTreeSpawnTime: Game.Config.TREE_SPAWN_INTERVAL,
+        trees: [], // array of tree objects on map
+      },
     };
+
+    // Initialize kingdom with 5 free residents
+    for (let i = 0; i < 5; i++) {
+      Game.state.kingdom.population.residents.push({
+        id: i,
+        assignedJob: null,
+        gridPos: { col: Game.Config.GRID_COLS / 2, row: Game.Config.GRID_ROWS / 2 },
+        state: 'idle',
+        target: null,
+        progress: 0,
+        hp: Game.Config.RESIDENT_HP,
+        maxHp: Game.Config.RESIDENT_HP,
+        path: [],
+      });
+    }
 
     Game.Particles.clear();
     Game.Renderer._decoMapRef = null;
@@ -85,7 +129,7 @@ Game.Main = {
       this.updateMenu(dt);
       this.drawMenu(dt);
     } else {
-      this.updateGame(dt);
+      this.updateGame(dt, now);
       this.drawGame(dt);
     }
 
@@ -100,7 +144,10 @@ Game.Main = {
     for (const p of this.menuParticles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      if (p.y < -10) { p.y = this.canvas.height + 10; p.x = Math.random() * this.canvas.width; }
+      if (p.y < -10) {
+        p.y = this.canvas.height + 10;
+        p.x = Math.random() * this.canvas.width;
+      }
       if (p.x < -10) p.x = this.canvas.width + 10;
       if (p.x > this.canvas.width + 10) p.x = -10;
     }
@@ -120,7 +167,7 @@ Game.Main = {
     }
   },
 
-  drawMenu(dt) {
+  drawMenu(_dt) {
     const ctx = this.ctx;
     const canvas = this.canvas;
     const t = this.menuTime;
@@ -138,12 +185,14 @@ Game.Main = {
     ctx.lineWidth = 1;
     for (let x = 0; x < canvas.width; x += 40) {
       ctx.beginPath();
-      ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
       ctx.stroke();
     }
     for (let y = 0; y < canvas.height; y += 40) {
       ctx.beginPath();
-      ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
 
@@ -160,8 +209,12 @@ Game.Main = {
     // Radial glow behind title
     const titleY = 72;
     const glow = ctx.createRadialGradient(
-      canvas.width / 2, titleY, 0,
-      canvas.width / 2, titleY, 200
+      canvas.width / 2,
+      titleY,
+      0,
+      canvas.width / 2,
+      titleY,
+      200
     );
     glow.addColorStop(0, 'rgba(255,180,0,0.08)');
     glow.addColorStop(0.5, 'rgba(255,140,0,0.03)');
@@ -188,7 +241,12 @@ Game.Main = {
     // Decorative line under subtitle
     const lineW = 200;
     const lineY = titleY + 44;
-    const lineGrad = ctx.createLinearGradient(canvas.width / 2 - lineW / 2, lineY, canvas.width / 2 + lineW / 2, lineY);
+    const lineGrad = ctx.createLinearGradient(
+      canvas.width / 2 - lineW / 2,
+      lineY,
+      canvas.width / 2 + lineW / 2,
+      lineY
+    );
     lineGrad.addColorStop(0, 'rgba(255,215,0,0)');
     lineGrad.addColorStop(0.3, 'rgba(255,215,0,0.3)');
     lineGrad.addColorStop(0.5, 'rgba(255,215,0,0.5)');
@@ -253,14 +311,22 @@ Game.Main = {
     ctx.font = '10px monospace';
     ctx.fillStyle = '#444466';
     const helpY = canvas.height - 50;
-    ctx.fillText('1-6 select tower | Click to place | Right-click to cancel', canvas.width / 2, helpY);
-    ctx.fillText('U=Upgrade | S=Sell | T=Target mode | Space=Pause | Enter=Start wave early', canvas.width / 2, helpY + 14);
+    ctx.fillText(
+      '1-6 select tower | Click to place | Right-click to cancel',
+      canvas.width / 2,
+      helpY
+    );
+    ctx.fillText(
+      'U=Upgrade | S=Sell | T=Target mode | Space=Pause | Enter=Start wave early',
+      canvas.width / 2,
+      helpY + 14
+    );
     ctx.fillText('+/- for game speed', canvas.width / 2, helpY + 28);
 
     ctx.textAlign = 'left';
   },
 
-  updateGame(dt) {
+  updateGame(dt, now) {
     const state = Game.state;
     if (!state) return;
 
@@ -274,6 +340,21 @@ Game.Main = {
     if (Game.Map.castleCol < 0) return; // no castle yet
 
     const gameDt = dt * state.gameSpeed;
+
+    // Handle wave timing (auto-start after delay)
+    if (Game.WaveSpawner.betweenWaves && state.kingdom && state.kingdom.waves) {
+      if (!state.kingdom.waves.lastWaveEndTime) {
+        state.kingdom.waves.lastWaveEndTime = now;
+      }
+      const timeSinceWaveEnd = (now - state.kingdom.waves.lastWaveEndTime) / 1000;
+      if (timeSinceWaveEnd > Game.Config.AUTO_WAVE_DELAY / 1000) {
+        // Auto-start wave
+        if (Game.WaveSpawner && !Game.WaveSpawner.allWavesDone) {
+          Game.WaveSpawner.startWave();
+          state.kingdom.waves.lastWaveEndTime = 0;
+        }
+      }
+    }
 
     Game.WaveSpawner.update(gameDt, state);
 
@@ -303,7 +384,10 @@ Game.Main = {
         const tsp = Game.Renderer.worldToScreen(tower.x, tower.y);
         Game.Particles.explosion(tsp.x, tsp.y - 10, 30, tower.color);
         Game.Particles.spawn(tsp.x, tsp.y - 10, 15, '#FF4400', {
-          speed: 100, life: 0.5, size: 3, glow: true,
+          speed: 100,
+          life: 0.5,
+          size: 3,
+          glow: true,
         });
         Game.Renderer.shake(5, 0.3);
         // Deselect if selected
@@ -316,7 +400,12 @@ Game.Main = {
       Game.Map.computeFlowField(state.towers);
       // Enemies attacking destroyed towers need to re-evaluate
       for (const enemy of state.enemies) {
-        if (enemy.attacking && enemy.attackTarget !== 'castle' && enemy.attackTarget && enemy.attackTarget.destroyed) {
+        if (
+          enemy.attacking &&
+          enemy.attackTarget !== 'castle' &&
+          enemy.attackTarget &&
+          enemy.attackTarget.destroyed
+        ) {
           enemy.attacking = false;
           enemy.attackTarget = null;
           enemy.nextCol = -1;
@@ -328,6 +417,22 @@ Game.Main = {
       if (!proj.dead) proj.update(gameDt);
     }
 
+    // Castle archers fire
+    if (Game.Castle && Game.state.kingdom.castle) {
+      Game.Castle.fireArchers(now);
+    }
+
+    // Check if castle is destroyed
+    if (Game.Castle && Game.Castle.isDestroyed()) {
+      this.menuState = 'playing';
+      Game.state.gameState = 'gameover';
+    }
+
+    // Spawn trees periodically
+    if (Game.Kingdom && Game.state.kingdom) {
+      Game.Kingdom.spawnTree(gameDt);
+    }
+
     Game.Particles.update(gameDt);
 
     for (const enemy of state.enemies) {
@@ -337,7 +442,10 @@ Game.Main = {
         const esp = Game.Renderer.worldToScreen(enemy.x, enemy.y);
         Game.Particles.goldPopup(esp.x, esp.y, enemy.gold);
         Game.Particles.spawn(esp.x, esp.y, 10, enemy.color, {
-          speed: 100, life: 0.5, size: 3, glow: true,
+          speed: 100,
+          life: 0.5,
+          size: 3,
+          glow: true,
         });
         if (enemy.type === 'boss') {
           Game.Renderer.shake(6, 0.3);
@@ -358,11 +466,14 @@ Game.Main = {
 
     const waveComplete = Game.WaveSpawner.isWaveComplete(state.enemies);
 
-    state.enemies = state.enemies.filter(e => !e.dead && !e.escaped);
-    state.projectiles = state.projectiles.filter(p => !p.dead);
+    state.enemies = state.enemies.filter((e) => !e.dead && !e.escaped);
+    state.projectiles = state.projectiles.filter((p) => !p.dead);
 
     if (waveComplete) {
-      if (Game.WaveSpawner.allWavesDone || Game.WaveSpawner.getCurrentWave() >= Game.WaveSpawner.getTotalWaves()) {
+      if (
+        Game.WaveSpawner.allWavesDone ||
+        Game.WaveSpawner.getCurrentWave() >= Game.WaveSpawner.getTotalWaves()
+      ) {
         if (state.enemies.length === 0) {
           state.gameState = 'victory';
         }
@@ -376,6 +487,10 @@ Game.Main = {
           Game.Particles.goldPopup(this.canvas.width / 2, 60, interest);
         }
         Game.WaveSpawner.startBetweenWaves();
+        // Record wave end time for auto-start
+        if (state.kingdom && state.kingdom.waves) {
+          state.kingdom.waves.lastWaveEndTime = now;
+        }
       }
     }
   },
@@ -394,8 +509,14 @@ Game.Main = {
           // Check all entries can reach castle
           let allReachable = true;
           for (const entry of Game.Map.entries) {
-            const f = Game.Map.flowField && Game.Map.flowField[entry.row] && Game.Map.flowField[entry.row][entry.col];
-            if (!f) { allReachable = false; break; }
+            const f =
+              Game.Map.flowField &&
+              Game.Map.flowField[entry.row] &&
+              Game.Map.flowField[entry.row][entry.col];
+            if (!f) {
+              allReachable = false;
+              break;
+            }
           }
           if (allReachable) {
             state.gameState = 'playing';
@@ -405,7 +526,10 @@ Game.Main = {
               grid.row * Game.Config.TILE_SIZE + Game.Config.TILE_SIZE / 2
             );
             Game.Particles.spawn(sp.x, sp.y, 12, '#FFD700', {
-              speed: 80, life: 0.6, size: 3, glow: true,
+              speed: 80,
+              life: 0.6,
+              size: 3,
+              glow: true,
             });
           } else {
             Game.Map.placeCastle(-1, -1);
@@ -480,17 +604,32 @@ Game.Main = {
       }
     }
 
-    if (input.isKeyPressed('Enter') && Game.WaveSpawner.betweenWaves) {
-      const bonus = Game.WaveSpawner.startEarly();
-      state.gold += bonus;
-      if (bonus > 0) {
-        Game.Particles.goldPopup(this.canvas.width / 2, this.canvas.height / 2, bonus);
+    // Manual wave start on Enter (or auto-start with bonus)
+    if (input.isKeyPressed('Enter')) {
+      if (Game.WaveSpawner.betweenWaves) {
+        const bonus = Game.WaveSpawner.startEarly();
+        state.gold += bonus;
+        if (bonus > 0) {
+          Game.Particles.goldPopup(this.canvas.width / 2, this.canvas.height / 2, bonus);
+        }
+      } else if (state.gameState === 'placeCastle' && Game.WaveSpawner) {
+        // Start first wave after castle placement
+        Game.WaveSpawner.startWave();
+        state.gameState = 'playing';
+        if (state.kingdom && state.kingdom.waves) {
+          state.kingdom.waves.lastWaveEndTime = 0;
+        }
       }
     }
 
     if (input.clicked && input.clickPos) {
       const x = input.clickPos.x;
       const y = input.clickPos.y;
+
+      // Handle HUD clicks first
+      if (Game.Input.handleHUDClick()) {
+        return;
+      }
 
       if (Game.UI.handleClick(state, x, y, this.canvas)) {
         return;
@@ -511,7 +650,10 @@ Game.Main = {
             Game.Map.computeFlowField(state.towers);
             const tsp = Game.Renderer.worldToScreen(tower.x, tower.y);
             Game.Particles.spawn(tsp.x, tsp.y, 6, def.color, {
-              speed: 60, life: 0.3, size: 2, glow: true,
+              speed: 60,
+              life: 0.3,
+              size: 2,
+              glow: true,
             });
             if (state.gold < def.cost) {
               state.placingTower = null;
@@ -519,7 +661,7 @@ Game.Main = {
           }
         }
       } else {
-        const clickedTower = state.towers.find(t => t.col === col && t.row === row);
+        const clickedTower = state.towers.find((t) => t.col === col && t.row === row);
         state.selectedTower = clickedTower || null;
       }
     }

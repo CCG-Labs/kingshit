@@ -27,7 +27,7 @@ Game.WaveSpawner = {
     }
 
     const waveDef = this.waves[this.waveIndex];
-    this.groups = waveDef.map(g => ({
+    this.groups = waveDef.map((g) => ({
       enemyType: g.enemyType,
       count: g.count,
       interval: g.interval,
@@ -42,6 +42,10 @@ Game.WaveSpawner = {
     this.waveIndex++;
   },
 
+  startNextWave() {
+    this.startWave();
+  },
+
   startEarly() {
     if (!this.betweenWaves) return 0;
     const bonus = Math.round(this.betweenWaveTimer * 2);
@@ -52,7 +56,7 @@ Game.WaveSpawner = {
   isWaveComplete(enemies) {
     if (this.betweenWaves) return false;
     if (this.activeGroups.length > 0) return false;
-    return enemies.every(e => e.dead || e.escaped);
+    return enemies.every((e) => e.dead || e.escaped);
   },
 
   update(dt, state) {
@@ -95,6 +99,10 @@ Game.WaveSpawner = {
   startBetweenWaves() {
     this.betweenWaves = true;
     this.betweenWaveTimer = Game.Config.BETWEEN_WAVE_TIME;
+    // Mark wave completion time for auto-start handling
+    if (Game.state && Game.state.kingdom && Game.state.kingdom.waves) {
+      Game.state.kingdom.waves.lastWaveEndTime = performance.now();
+    }
   },
 
   getCurrentWave() {

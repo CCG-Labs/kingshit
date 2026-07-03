@@ -148,7 +148,7 @@ Game.UI = {
 
     // Castle HP
     const castleRatio = state.castleHp / state.castleMaxHp;
-    ctx.fillStyle = castleRatio > 0.6 ? '#FFD700' : (castleRatio > 0.3 ? '#FF8800' : '#FF3333');
+    ctx.fillStyle = castleRatio > 0.6 ? '#FFD700' : castleRatio > 0.3 ? '#FF8800' : '#FF3333';
     ctx.fillText('\u2656 ' + state.castleHp, 220, y);
 
     // Wave
@@ -226,15 +226,26 @@ Game.UI = {
       this.towerButtons.push({ x: bx, y: by, w: btnW, h: btnH, type });
 
       // Check hover
-      const mx = Game.Input.mouse.x, my = Game.Input.mouse.y;
+      const mx = Game.Input.mouse.x,
+        my = Game.Input.mouse.y;
       const hovered = mx >= bx && mx <= bx + btnW && my >= by && my <= by + btnH;
       if (hovered) this.hoveredTowerType = type;
 
       // Button panel
-      const bg = selected ? 'rgba(255,255,255,0.12)' : (hovered ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.25)');
-      const borderColor = selected ? def.color : (hovered ? 'rgba(200,200,200,0.3)' : 'rgba(80,80,80,0.3)');
+      const bg = selected
+        ? 'rgba(255,255,255,0.12)'
+        : hovered
+          ? 'rgba(255,255,255,0.06)'
+          : 'rgba(0,0,0,0.25)';
+      const borderColor = selected
+        ? def.color
+        : hovered
+          ? 'rgba(200,200,200,0.3)'
+          : 'rgba(80,80,80,0.3)';
       this._drawPanel(ctx, bx, by, btnW, btnH, {
-        bg, border: borderColor, borderWidth: selected ? 2 : 1,
+        bg,
+        border: borderColor,
+        borderWidth: selected ? 2 : 1,
       });
 
       // Tower icon
@@ -297,7 +308,11 @@ Game.UI = {
 
     ty += 16;
     ctx.fillStyle = '#CCCCCC';
-    ctx.fillText('DMG: ' + def.damage + '  RNG: ' + def.range + '  SPD: ' + def.fireRate + 's', tipX + 10, ty);
+    ctx.fillText(
+      'DMG: ' + def.damage + '  RNG: ' + def.range + '  SPD: ' + def.fireRate + 's',
+      tipX + 10,
+      ty
+    );
 
     ty += 14;
     ctx.fillStyle = '#4488FF';
@@ -349,7 +364,8 @@ Game.UI = {
     y += 16;
     ctx.fillText('Fire Rate: ' + tower.fireRate.toFixed(2) + 's', panelX + 10, y);
     y += 16;
-    const hpColor = tower.hp >= tower.maxHp ? '#4488FF' : (tower.hp / tower.maxHp > 0.3 ? '#FFAA44' : '#FF4444');
+    const hpColor =
+      tower.hp >= tower.maxHp ? '#4488FF' : tower.hp / tower.maxHp > 0.3 ? '#FFAA44' : '#FF4444';
     ctx.fillStyle = hpColor;
     ctx.fillText('HP: ' + Math.ceil(tower.hp) + '/' + tower.maxHp, panelX + 10, y);
     y += 16;
@@ -376,11 +392,15 @@ Game.UI = {
       const btnH = 24;
       this.upgradeBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-      const mx = Game.Input.mouse.x, my = Game.Input.mouse.y;
+      const mx = Game.Input.mouse.x,
+        my = Game.Input.mouse.y;
       const hov = mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
 
       this._drawButton(ctx, btnX, btnY, btnW, btnH, 'Upgrade (' + cost + 'g) [U]', {
-        hovered: hov, affordable, color: '#44AA44', darkerColor: '#2A4A2A',
+        hovered: hov,
+        affordable,
+        color: '#44AA44',
+        darkerColor: '#2A4A2A',
       });
       y += 30;
     }
@@ -393,11 +413,14 @@ Game.UI = {
     const sellH = 24;
     this.sellBtn = { x: sellX, y: sellY, w: sellW, h: sellH };
 
-    const mx2 = Game.Input.mouse.x, my2 = Game.Input.mouse.y;
+    const mx2 = Game.Input.mouse.x,
+      my2 = Game.Input.mouse.y;
     const hov2 = mx2 >= sellX && mx2 <= sellX + sellW && my2 >= sellY && my2 <= sellY + sellH;
 
     this._drawButton(ctx, sellX, sellY, sellW, sellH, 'Sell (' + sellVal + 'g) [S]', {
-      hovered: hov2, color: '#AA4444', darkerColor: '#4A2A2A',
+      hovered: hov2,
+      color: '#AA4444',
+      darkerColor: '#4A2A2A',
     });
 
     ctx.textAlign = 'left';
@@ -462,15 +485,21 @@ Game.UI = {
     ctx.fillText('Wave ' + nextWave + ' in ' + Math.ceil(timer) + 's', canvas.width / 2, boxY + 24);
 
     // Start early button
-    const btnX = boxX + 40, btnY = boxY + 38, btnW = boxW - 80, btnH = 24;
+    const btnX = boxX + 40,
+      btnY = boxY + 38,
+      btnW = boxW - 80,
+      btnH = 24;
     this.startEarlyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-    const mx = Game.Input.mouse.x, my = Game.Input.mouse.y;
+    const mx = Game.Input.mouse.x,
+      my = Game.Input.mouse.y;
     const hov = mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
     const bonus = Math.round(timer * 2);
 
     this._drawButton(ctx, btnX, btnY, btnW, btnH, 'Start Now (+' + bonus + 'g) [Enter]', {
-      hovered: hov, color: '#FFD700', darkerColor: '#4A3A10',
+      hovered: hov,
+      color: '#FFD700',
+      darkerColor: '#4A3A10',
     });
 
     ctx.textAlign = 'left';
@@ -485,8 +514,12 @@ Game.UI = {
 
     // Vignette
     const vg = ctx.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, canvas.height * 0.3,
-      canvas.width / 2, canvas.height / 2, canvas.height * 0.8
+      canvas.width / 2,
+      canvas.height / 2,
+      canvas.height * 0.3,
+      canvas.width / 2,
+      canvas.height / 2,
+      canvas.height * 0.8
     );
     vg.addColorStop(0, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(0,0,0,0.5)');
@@ -494,7 +527,8 @@ Game.UI = {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Panel
-    const pw = 360, ph = 140;
+    const pw = 360,
+      ph = 140;
     const px = (canvas.width - pw) / 2;
     const py = (canvas.height - ph) / 2 - 20;
     this._drawPanel(ctx, px, py, pw, ph, {
@@ -514,7 +548,11 @@ Game.UI = {
 
     ctx.fillStyle = '#CCCCCC';
     ctx.font = '16px monospace';
-    ctx.fillText('Survived ' + Game.WaveSpawner.getCurrentWave() + ' waves', canvas.width / 2, py + 90);
+    ctx.fillText(
+      'Survived ' + Game.WaveSpawner.getCurrentWave() + ' waves',
+      canvas.width / 2,
+      py + 90
+    );
 
     ctx.fillStyle = '#888888';
     ctx.font = '13px monospace';
@@ -527,7 +565,8 @@ Game.UI = {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const pw = 380, ph = 160;
+    const pw = 380,
+      ph = 160;
     const px = (canvas.width - pw) / 2;
     const py = (canvas.height - ph) / 2 - 20;
     this._drawPanel(ctx, px, py, pw, ph, {
@@ -550,7 +589,7 @@ Game.UI = {
     ctx.fillText('Lives: ' + state.lives + '  Gold: ' + state.gold, canvas.width / 2, py + 90);
 
     // Rating
-    const stars = state.lives >= 15 ? 3 : (state.lives >= 8 ? 2 : 1);
+    const stars = state.lives >= 15 ? 3 : state.lives >= 8 ? 2 : 1;
     ctx.fillStyle = '#FFD700';
     ctx.font = '24px monospace';
     ctx.fillText('\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars), canvas.width / 2, py + 120);
@@ -628,4 +667,90 @@ Game.UI = {
 
     return false;
   },
+};
+
+// ── Kingdom HUD ──────────────────────────────────────────
+
+Game.UI.populationPanelOpen = false;
+
+Game.UI.drawHUD = function (ctx, canvasWidth, canvasHeight) {
+  const hudHeight = 30;
+  const padding = 5;
+
+  // Draw HUD background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, canvasWidth, hudHeight);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '12px monospace';
+
+  // Resources section
+  let x = padding;
+  if (Game.state && Game.state.kingdom) {
+    const wood = Game.Resources.get('wood');
+    ctx.fillText(`Wood: ${wood}`, x, 20);
+    x += 120;
+  }
+
+  // Population section
+  if (Game.state && Game.state.kingdom && Game.Kingdom) {
+    const pop = Game.Kingdom.getPopulation();
+    const cap = Game.Kingdom.getCapacity();
+    ctx.fillText(`Pop: ${pop}/${cap}`, x, 20);
+    x += 120;
+  }
+
+  // Castle section
+  if (Game.state && Game.state.kingdom && Game.Castle) {
+    const level = Game.Castle.getLevel();
+    const hp = Game.Castle.getHP();
+    const maxHp = Game.state.kingdom.castle.maxHp;
+    const levelName = Game.Config.CASTLE_UPGRADES.find((u) => u.level === level)?.name || 'Unknown';
+    ctx.fillText(`${levelName} (L${level}) | HP: ${hp}/${maxHp}`, x, 20);
+  }
+};
+
+Game.UI.showPopulationPanel = function () {
+  Game.UI.populationPanelOpen = true;
+};
+
+Game.UI.closePopulationPanel = function () {
+  Game.UI.populationPanelOpen = false;
+};
+
+Game.UI.drawPopulationPanel = function (ctx, canvasWidth, canvasHeight) {
+  if (!Game.UI.populationPanelOpen) return;
+
+  const panelWidth = 300;
+  const panelHeight = 200;
+  const panelX = canvasWidth / 2 - panelWidth / 2;
+  const panelY = canvasHeight / 2 - panelHeight / 2;
+
+  // Draw panel background
+  ctx.fillStyle = 'rgba(50, 50, 50, 0.95)';
+  ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+  ctx.strokeStyle = '#FFFF00';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
+
+  // Draw title
+  ctx.fillStyle = '#FFFF00';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('POPULATION', panelX + 10, panelY + 20);
+
+  // Draw info
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '12px monospace';
+  let y = panelY + 45;
+  if (Game.Kingdom) {
+    const pop = Game.Kingdom.getPopulation();
+    const cap = Game.Kingdom.getCapacity();
+    const free = Game.Kingdom.getFreeResidents();
+    ctx.fillText(`Current: ${pop}/${cap}`, panelX + 10, y);
+    y += 20;
+    ctx.fillText(`Free: ${free}`, panelX + 10, y);
+    y += 25;
+    ctx.fillStyle = '#FFFF00';
+    ctx.fillText('Lumberjack: ' + Game.Kingdom.getJobCount('lumberjack'), panelX + 10, y);
+  }
 };
